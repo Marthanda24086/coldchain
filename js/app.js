@@ -579,9 +579,10 @@ const App = (() => {
 
     if (channelInfo) {
       setText("health-channel-name", channelInfo.name || "—");
-      setText("health-channel-id",   channelInfo.id   || CONFIG.CHANNEL_ID);
+      setText("health-channel-id",   channelInfo.id   || CONFIG.getChannelId());
       setText("health-channel-desc", channelInfo.description || "—");
     }
+    updateApiConnectionBadge();
 
     // Gaps list
     const gapRows = health.gapsList.map(g =>
@@ -637,6 +638,7 @@ const App = (() => {
 
   // ── SECTION 0: PRODUCTS PAGE ──────────────────────────────────────────────
   function renderProductsPage() {
+    populateInlineEditorWithActive();
     const products = window.productManager.getProducts();
     const activeId = window.productManager.activeProductId;
 
@@ -661,7 +663,7 @@ const App = (() => {
         <p class="product-notes">${p.notes}</p>
         <div class="product-actions">
           <button class="btn btn-sm" onclick="App.activateProduct('${p.id}')">Monitor this</button>
-          <button class="btn btn-sm btn-outline" onclick="App.openEditProduct('${p.id}')">Edit</button>
+          <button class="btn btn-sm btn-outline" onclick="App.openEditProduct('${p.id}')">Customize</button>
           <button class="btn btn-sm btn-outline" onclick="App.duplicateProduct('${p.id}')">Duplicate</button>
           <button class="btn btn-sm btn-danger" onclick="App.deleteProduct('${p.id}')">Delete</button>
         </div>
@@ -696,8 +698,8 @@ const App = (() => {
     renderProductsPage();
   }
 
-  function openEditProduct(id) {
-    const p = id ? window.productManager.getProductById(id) : null;
+  function populateInlineEditor(p) {
+    if (!p) p = window.productManager.getActiveProduct();
     const form = el("product-form");
     if (!form) return;
     const fields = ["id", "name", "emoji", "category", "tempMin", "tempMax", "setpoint", "humMin", "humMax",
@@ -706,11 +708,46 @@ const App = (() => {
       const input = form.querySelector(`[name="${f}"]`);
       if (input) input.value = p ? (p[f] ?? "") : "";
     }
-    if (!id) {
-      const idInput = form.querySelector('[name="id"]');
-      if (idInput) idInput.value = `product-${Date.now().toString().slice(-4)}`;
+    const titleEl = el("inline-editor-title");
+    if (titleEl) titleEl.textContent = `🛠️ Customize: ${p.emoji} ${p.name}`;
+  }
+
+  function populateInlineEditorWithActive() {
+    populateInlineEditor(window.productManager.getActiveProduct());
+  }
+
+  function openEditProduct(id) {
+    const p = id ? window.productManager.getProductById(id) : null;
+    if (currentSection !== "products") {
+      navigateTo("products");
     }
-    el("product-modal").hidden = false;
+    if (p) {
+      populateInlineEditor(p);
+    } else {
+      const newP = {
+        id: `custom-${Date.now().toString().slice(-4)}`,
+        name: "New Custom Product",
+        emoji: "📦",
+        category: "Custom",
+        tempMin: 2.0,
+        tempMax: 8.0,
+        setpoint: 5.0,
+        humMin: 30.0,
+        humMax: 60.0,
+        warningMarginTemp: 0.5,
+        warningMarginHum: 3.0,
+        gracePeriodMinutes: 5,
+        baseShelfLifeDays: 30,
+        q10Factor: 2.0,
+        notes: "Custom product storage specifications."
+      };
+      populateInlineEditor(newP);
+      const titleEl = el("inline-editor-title");
+      if (titleEl) titleEl.textContent = "➕ Create New Custom Product Profile";
+    }
+    setTimeout(() => {
+      el("inline-product-editor-card")?.scrollIntoView({ behavior: "smooth" });
+    }, 50);
   }
 
   function saveProductFromForm() {
@@ -721,10 +758,14 @@ const App = (() => {
     for (const f of form.querySelectorAll("[name]")) {
       data[f.name] = numFields.includes(f.name) ? parseFloat(f.value) : f.value;
     }
+    if (!data.id || data.id.trim() === "") {
+      data.id = `custom-${Date.now().toString().slice(-4)}`;
+    }
     window.productManager.saveProduct(data);
-    el("product-modal").hidden = true;
+    window.productManager.setActiveProduct(data.id);
     renderProductsPage();
     updateProductSelector();
+    refresh();
   }
 
   function duplicateProduct(id) {
@@ -1069,32 +1110,42 @@ const App = (() => {
     if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
   }
 
-  function openApiSettingsModal() {
-    const modal = el("api-settings-modal");
-    if (!modal) return;
-    const cidInput = el("api-channel-id-input");
-    const keyInput = el("api-read-key-input");
-    if (cidInput) cidInput.value = (CONFIG.getChannelId() === "YOUR_CHANNEL_ID") ? "" : CONFIG.getChannelId();
-    if (keyInput) keyInput.value = (CONFIG.getReadApiKey() === "YOUR_READ_API_KEY") ? "" : CONFIG.getReadApiKey();
-    modal.hidden = false;
-  }
-
   function saveApiSettings() {
     const cid = (el("api-channel-id-input")?.value || "").trim();
     const key = (el("api-read-key-input")?.value || "").trim();
     CONFIG.setCredentials(cid, key);
-    el("api-settings-modal").hidden = true;
     channelInfo = null;
     allReadings = [];
     refresh();
+    updateApiConnectionBadge();
+    alert("✓ ThingSpeak credentials saved and connected!");
   }
 
   function resetApiSettingsToDemo() {
     CONFIG.setCredentials("", "");
-    el("api-settings-modal").hidden = true;
+    if (el("api-channel-id-input")) el("api-channel-id-input").value = "";
+    if (el("api-read-key-input")) el("api-read-key-input").value = "";
     channelInfo = null;
     allReadings = [];
     refresh();
+    updateApiConnectionBadge();
+    alert("✓ Switched to Demo Mode.");
+  }
+
+  function updateApiConnectionBadge() {
+    const pill = el("api-connection-status-pill");
+    if (!pill) return;
+    if (isDemoMode()) {
+      pill.textContent = "Demo Mode Active";
+      pill.className = "badge badge-info";
+    } else {
+      pill.textContent = `Connected: Channel #${CONFIG.getChannelId()}`;
+      pill.className = "badge badge-pass";
+    }
+    const cidInput = el("api-channel-id-input");
+    const keyInput = el("api-read-key-input");
+    if (cidInput && !cidInput.value) cidInput.value = (CONFIG.getChannelId() === "YOUR_CHANNEL_ID") ? "" : CONFIG.getChannelId();
+    if (keyInput && !keyInput.value) keyInput.value = (CONFIG.getReadApiKey() === "YOUR_READ_API_KEY") ? "" : CONFIG.getReadApiKey();
   }
 
   // Public API
@@ -1105,6 +1156,7 @@ const App = (() => {
     activateProduct,
     openEditProduct,
     saveProductFromForm,
+    populateInlineEditorWithActive,
     duplicateProduct,
     deleteProduct,
     endBatch,
@@ -1113,9 +1165,9 @@ const App = (() => {
     exportStatsCSV,
     printReport,
     playAlarmChime,
-    openApiSettingsModal,
     saveApiSettings,
-    resetApiSettingsToDemo
+    resetApiSettingsToDemo,
+    updateApiConnectionBadge
   };
 })();
 

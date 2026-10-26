@@ -15,8 +15,8 @@ const CONFIG = {
   // =========================================================================
   // >>> PLACE YOUR THINGSPEAK CREDENTIALS HERE (LINES 17-18) <<<
   // =========================================================================
-  CHANNEL_ID: "YOUR_CHANNEL_ID",      // <--- Put your Channel ID here (e.g. "2741920")
-  READ_API_KEY: "YOUR_READ_API_KEY",  // <--- Put your 16-character READ API Key here
+  CHANNEL_ID: "3549272",      // <--- Put your Channel ID here (e.g. "2741920")
+  READ_API_KEY: "UI1EVIHCFTSO6QHR",  // <--- Put your 16-character READ API Key here
 
   // =========================================================================
   // TIMING & DEFAULTS

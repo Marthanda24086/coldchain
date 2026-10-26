@@ -58,7 +58,7 @@
             <select id="product-selector" class="form-select">
               <!-- populated dynamically -->
             </select>
-            <button class="btn btn-sm btn-outline" id="btn-quick-edit" title="Edit active product limits">✏️ Edit</button>
+            <button class="btn btn-sm btn-outline" onclick="App.openEditProduct(window.productManager.activeProductId)" title="Customize limits for active product">✏️ Customize</button>
           </div>
 
           <!-- Status Badge -->
@@ -70,9 +70,6 @@
         </div>
 
         <div class="top-bar-right">
-          <!-- Connect API Key Button -->
-          <button class="btn btn-sm btn-outline" id="btn-api-settings" onclick="App.openApiSettingsModal()" title="Connect your ThingSpeak Channel ID & Read API Key">⚙️ Connect API Key</button>
-
           <!-- Time Range Selector -->
           <select id="time-range-selector" class="form-select" style="background:var(--bg-surface-elevated); padding:0.3rem 0.6rem; border-radius:var(--radius-sm); border:1px solid var(--border);">
             <option value="1">Last 1 Hour</option>
@@ -206,19 +203,103 @@
         <!-- SECTION 0: PRODUCTS & BATCHES                                    -->
         <!-- ================================================================ -->
         <section id="section-products" class="section-panel" hidden>
+
+          <!-- INLINE Product Customizer & Editor Card (NO POPUP WINDOW!) -->
+          <div class="card" id="inline-product-editor-card" style="border: 2px solid var(--border-focus);">
+            <div class="card-header">
+              <div class="card-title" id="inline-editor-title">🛠️ Customize Active Product Limits</div>
+              <span style="font-size:0.8rem; color:var(--text-muted);">Changes save immediately and recompute all analytics</span>
+            </div>
+
+            <form id="product-form" onsubmit="event.preventDefault();">
+              <input type="hidden" name="id" id="edit-product-id">
+
+              <div class="form-row">
+                <div class="form-group" style="width: 75px;">
+                  <label>Emoji</label>
+                  <input type="text" name="emoji" id="edit-product-emoji" class="form-input" style="font-size: 1.4rem; text-align: center;" required>
+                </div>
+                <div class="form-group" style="flex: 2;">
+                  <label>Product Name</label>
+                  <input type="text" name="name" id="edit-product-name" class="form-input" required>
+                </div>
+                <div class="form-group" style="flex: 1;">
+                  <label>Category</label>
+                  <input type="text" name="category" id="edit-product-category" class="form-input" required>
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group" style="flex:1;">
+                  <label>Min Temp (°C)</label>
+                  <input type="number" step="0.1" name="tempMin" id="edit-product-tempMin" class="form-input" required>
+                </div>
+                <div class="form-group" style="flex:1;">
+                  <label>Max Temp (°C)</label>
+                  <input type="number" step="0.1" name="tempMax" id="edit-product-tempMax" class="form-input" required>
+                </div>
+                <div class="form-group" style="flex:1;">
+                  <label>Target Setpoint (°C)</label>
+                  <input type="number" step="0.1" name="setpoint" id="edit-product-setpoint" class="form-input" required>
+                </div>
+                <div class="form-group" style="flex:1;">
+                  <label>Min Humidity (%)</label>
+                  <input type="number" step="1" name="humMin" id="edit-product-humMin" class="form-input" required>
+                </div>
+                <div class="form-group" style="flex:1;">
+                  <label>Max Humidity (%)</label>
+                  <input type="number" step="1" name="humMax" id="edit-product-humMax" class="form-input" required>
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group" style="flex:1;">
+                  <label>Temp Warning Margin (°C)</label>
+                  <input type="number" step="0.1" name="warningMarginTemp" id="edit-product-warnTemp" class="form-input" value="0.5">
+                </div>
+                <div class="form-group" style="flex:1;">
+                  <label>Humidity Warning Margin (%)</label>
+                  <input type="number" step="0.5" name="warningMarginHum" id="edit-product-warnHum" class="form-input" value="3.0">
+                </div>
+                <div class="form-group" style="flex:1;">
+                  <label>Grace Period (min)</label>
+                  <input type="number" step="1" name="gracePeriodMinutes" id="edit-product-grace" class="form-input" value="5">
+                </div>
+                <div class="form-group" style="flex:1;">
+                  <label>Base Shelf Life (days)</label>
+                  <input type="number" step="1" name="baseShelfLifeDays" id="edit-product-shelf" class="form-input" value="30">
+                </div>
+                <div class="form-group" style="flex:1;">
+                  <label>Q10 Aging Factor</label>
+                  <input type="number" step="0.1" name="q10Factor" id="edit-product-q10" class="form-input" value="2.0">
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label>Storage Notes &amp; Regulatory Guidance</label>
+                <input type="text" name="notes" id="edit-product-notes" class="form-input">
+              </div>
+
+              <div style="display:flex; justify-content:flex-end; gap:0.5rem; margin-top:0.5rem;">
+                <button type="button" class="btn btn-outline" onclick="App.populateInlineEditorWithActive()">Revert to Active Profile</button>
+                <button type="button" class="btn" id="product-form-save" onclick="App.saveProductFromForm()">💾 Save &amp; Apply Changes</button>
+              </div>
+            </form>
+          </div>
+
+          <!-- Product Presets Catalog -->
           <div class="card">
             <div class="card-header">
-              <div class="card-title">📦 Product Storage Profiles</div>
+              <div class="card-title">📦 Predetermined Product Profiles</div>
               <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
-                <button class="btn btn-sm" id="btn-add-product" onclick="App.openEditProduct(null)">➕ New Custom Profile</button>
+                <button class="btn btn-sm" onclick="App.openEditProduct(null)">➕ Create New Profile</button>
                 <button class="btn btn-sm btn-outline" id="btn-export-products">Export JSON</button>
                 <button class="btn btn-sm btn-outline" id="btn-import-products">Import JSON</button>
                 <button class="btn btn-sm btn-danger" id="btn-reset-products">Reset to Defaults</button>
               </div>
             </div>
             <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:1rem;">
-              Storage requirements adapt all analytics, alarms, MKT evaluations, and shelf-life forecasts in real time. 
-              Choose an active profile below, or create your own custom profile with tailored limits.
+              Click <strong>"Monitor this"</strong> on any product to make it the active standard, or <strong>"Customize"</strong> to edit its limits directly above.
             </p>
             <div id="products-grid" class="products-grid">
               <!-- Dynamically populated -->
@@ -535,6 +616,33 @@
         <!-- SECTION 7: DEVICE & DATA HEALTH                                  -->
         <!-- ================================================================ -->
         <section id="section-health" class="section-panel" hidden>
+
+          <!-- INLINE ThingSpeak Cloud Connection & API Key Configuration -->
+          <div class="card" id="inline-api-config-card" style="border: 2px solid var(--border-focus);">
+            <div class="card-header">
+              <div class="card-title">📡 ThingSpeak Cloud Connectivity &amp; API Key</div>
+              <span id="api-connection-status-pill" class="badge badge-info">Demo Mode Active</span>
+            </div>
+            <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:1rem;">
+              Configure your ThingSpeak Channel ID and Read API Key to ingest live cold chain telemetry from your ESP32 device.
+              (Keys can also be configured permanently in <code>js/config.js</code>).
+            </p>
+            <div style="display:flex; gap:1rem; flex-wrap:wrap; align-items:flex-end;">
+              <div class="form-group" style="margin-bottom:0; flex:1; min-width:200px;">
+                <label>ThingSpeak Channel ID</label>
+                <input type="text" id="api-channel-id-input" class="form-input" placeholder="e.g. 2741920">
+              </div>
+              <div class="form-group" style="margin-bottom:0; flex:1; min-width:240px;">
+                <label>Read API Key</label>
+                <input type="text" id="api-read-key-input" class="form-input" placeholder="e.g. 16-character Read Key">
+              </div>
+              <div style="display:flex; gap:0.5rem;">
+                <button type="button" class="btn" onclick="App.saveApiSettings()">Save &amp; Connect</button>
+                <button type="button" class="btn btn-outline" onclick="App.resetApiSettingsToDemo()">Switch to Demo</button>
+              </div>
+            </div>
+          </div>
+
           <div class="grid-3">
             <div class="card">
               <div class="kpi-label">Data Completeness</div>
@@ -731,141 +839,6 @@
         </section>
 
       </main>
-    </div>
-  </div>
-
-  <!-- ==================================================================== -->
-  <!-- MODALS                                                               -->
-  <!-- ==================================================================== -->
-
-  <!-- API Settings & Credentials Modal -->
-  <div id="api-settings-modal" class="modal-overlay" hidden>
-    <div class="modal">
-      <div class="modal-header">
-        <h3>⚙️ Connect ThingSpeak Cloud</h3>
-        <button class="btn btn-sm btn-outline" onclick="document.getElementById('api-settings-modal').hidden = true;">✕</button>
-      </div>
-
-      <p style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:1.25rem;">
-        Enter your ThingSpeak Channel details to fetch live telemetry from your ESP32 device. 
-        Your keys are stored privately in your browser's localStorage.
-      </p>
-
-      <div class="form-group">
-        <label>ThingSpeak Channel ID</label>
-        <input type="text" id="api-channel-id-input" class="form-input" placeholder="e.g. 2741920 (numeric Channel ID)">
-        <small style="color:var(--text-muted); font-size:0.75rem;">Found in your ThingSpeak channel overview.</small>
-      </div>
-
-      <div class="form-group">
-        <label>ThingSpeak READ API Key</label>
-        <input type="text" id="api-read-key-input" class="form-input" placeholder="e.g. 16-character Read API Key">
-        <small style="color:var(--text-muted); font-size:0.75rem;">Found in your channel's "API Keys" tab under "Read API Key". (Never enter your Write Key!)</small>
-      </div>
-
-      <div style="background:var(--bg-surface-elevated); padding:0.75rem; border-radius:var(--radius-sm); font-size:0.8rem; margin-bottom:1rem; border:1px solid var(--border);">
-        <strong>💡 Or edit the code directly:</strong> You can also set these permanently in <code style="font-weight:bold; color:var(--status-safe);">js/config.js</code> on lines 17 and 18 before pushing to GitHub.
-      </div>
-
-      <div style="display:flex; justify-content:space-between; align-items:center; gap:0.5rem; flex-wrap:wrap;">
-        <button type="button" class="btn btn-outline" id="btn-api-demo" onclick="App.resetApiSettingsToDemo()">Switch to Demo Mode</button>
-        <div style="display:flex; gap:0.5rem;">
-          <button type="button" class="btn btn-outline" onclick="document.getElementById('api-settings-modal').hidden = true;">Cancel</button>
-          <button type="button" class="btn" id="btn-api-save" onclick="App.saveApiSettings()">Save &amp; Connect</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Product Edit / Create Modal -->
-  <div id="product-modal" class="modal-overlay" hidden>
-    <div class="modal">
-      <div class="modal-header">
-        <h3 id="product-modal-title">Customize Product Profile</h3>
-        <button class="btn btn-sm btn-outline" id="product-form-cancel">✕</button>
-      </div>
-
-      <form id="product-form" onsubmit="event.preventDefault();">
-        <input type="hidden" name="id">
-
-        <div class="form-row">
-          <div class="form-group" style="width: 80px;">
-            <label>Emoji</label>
-            <input type="text" name="emoji" class="form-input" style="font-size: 1.5rem; text-align: center;" required>
-          </div>
-          <div class="form-group" style="flex-grow: 1;">
-            <label>Product Name</label>
-            <input type="text" name="name" class="form-input" required>
-          </div>
-        </div>
-
-        <div class="form-group">
-          <label>Category</label>
-          <input type="text" name="category" class="form-input" required>
-        </div>
-
-        <div class="form-row">
-          <div class="form-group" style="flex:1;">
-            <label>Min Temp (°C)</label>
-            <input type="number" step="0.1" name="tempMin" class="form-input" required>
-          </div>
-          <div class="form-group" style="flex:1;">
-            <label>Max Temp (°C)</label>
-            <input type="number" step="0.1" name="tempMax" class="form-input" required>
-          </div>
-          <div class="form-group" style="flex:1;">
-            <label>Target Setpoint (°C)</label>
-            <input type="number" step="0.1" name="setpoint" class="form-input" required>
-          </div>
-        </div>
-
-        <div class="form-row">
-          <div class="form-group" style="flex:1;">
-            <label>Min Humidity (% RH)</label>
-            <input type="number" step="1" name="humMin" class="form-input" required>
-          </div>
-          <div class="form-group" style="flex:1;">
-            <label>Max Humidity (% RH)</label>
-            <input type="number" step="1" name="humMax" class="form-input" required>
-          </div>
-        </div>
-
-        <div class="form-row">
-          <div class="form-group" style="flex:1;">
-            <label>Temp Warn Margin (°C)</label>
-            <input type="number" step="0.1" name="warningMarginTemp" class="form-input" value="0.5">
-          </div>
-          <div class="form-group" style="flex:1;">
-            <label>Hum Warn Margin (%)</label>
-            <input type="number" step="0.5" name="warningMarginHum" class="form-input" value="3.0">
-          </div>
-          <div class="form-group" style="flex:1;">
-            <label>Grace Period (min)</label>
-            <input type="number" step="1" name="gracePeriodMinutes" class="form-input" value="5">
-          </div>
-        </div>
-
-        <div class="form-row">
-          <div class="form-group" style="flex:1;">
-            <label>Base Shelf Life (days)</label>
-            <input type="number" step="1" name="baseShelfLifeDays" class="form-input" value="30">
-          </div>
-          <div class="form-group" style="flex:1;">
-            <label>Q10 Factor</label>
-            <input type="number" step="0.1" name="q10Factor" class="form-input" value="2.0">
-          </div>
-        </div>
-
-        <div class="form-group">
-          <label>Operational Notes / Citations</label>
-          <textarea name="notes" class="form-input" rows="2"></textarea>
-        </div>
-
-        <div style="display:flex; justify-content:flex-end; gap:0.5rem; margin-top:1rem;">
-          <button type="button" class="btn btn-outline" onclick="document.getElementById('product-modal').hidden = true;">Cancel</button>
-          <button type="button" class="btn" id="product-form-save">Save Profile</button>
-        </div>
-      </form>
     </div>
   </div>
 
