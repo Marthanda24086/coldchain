@@ -1,52 +1,78 @@
 /**
  * CoolChain Configuration
  * -------------------------------------------------------------
- * THIS IS THE ONLY FILE YOU NEED TO EDIT TO CONNECT YOUR THINGSPEAK CHANNEL.
+ * LOCATION TO PLACE YOUR THINGSPEAK API KEY & CHANNEL ID:
  * 
- * Instructions:
- * 1. Replace "YOUR_CHANNEL_ID" with your numeric ThingSpeak Channel ID (e.g. "1234567").
- * 2. Replace "YOUR_READ_API_KEY" with your ThingSpeak Read API Key (16 characters).
- *    (DO NOT enter your Write API Key or WiFi passwords here!)
- * 3. If left as "YOUR_CHANNEL_ID", CoolChain automatically runs in DEMO MODE
- *    with realistic simulated DHT11 cold-chain telemetry.
+ * Edit lines 17 and 18 below:
+ * - Replace "YOUR_CHANNEL_ID" with your numeric ThingSpeak Channel ID (e.g. "2741920")
+ * - Replace "YOUR_READ_API_KEY" with your ThingSpeak READ API Key (16 characters)
+ * 
+ * (Tip: You can also click the "⚙️ Connect ThingSpeak" button on the website
+ *  to paste your Channel ID and Read API Key directly in your browser without code editing!)
  */
 
 const CONFIG = {
-  // =========================================================
-  // THINGPEAK CLOUD CREDENTIALS (EDIT HERE)
-  // =========================================================
-  CHANNEL_ID: "YOUR_CHANNEL_ID",      // e.g. "2741920" (numeric ID)
-  READ_API_KEY: "YOUR_READ_API_KEY",  // 16-character ThingSpeak READ Key
+  // =========================================================================
+  // >>> PLACE YOUR THINGSPEAK CREDENTIALS HERE (LINES 17-18) <<<
+  // =========================================================================
+  CHANNEL_ID: "YOUR_CHANNEL_ID",      // <--- Put your Channel ID here (e.g. "2741920")
+  READ_API_KEY: "YOUR_READ_API_KEY",  // <--- Put your 16-character READ API Key here
 
-  // =========================================================
+  // =========================================================================
   // TIMING & DEFAULTS
-  // =========================================================
-  REFRESH_SECONDS: 30,               // Auto-refresh interval for website (seconds)
-  DEVICE_INTERVAL_SECONDS: 30,        // Expected time between ESP32 uploads (seconds)
-  DEFAULT_PRODUCT: "vaccines",        // Initial active product ID from data/default-products.json
+  // =========================================================================
+  REFRESH_SECONDS: 30,                // Auto-refresh interval (seconds)
+  DEVICE_INTERVAL_SECONDS: 30,         // Telemetry publication interval (seconds)
+  DEFAULT_PRODUCT: "vaccines",         // Initial selected product
 
-  // =========================================================
-  // ADVANCED API / NETWORK SETTINGS
-  // =========================================================
+  // =========================================================================
+  // API & CONNECTION SETTINGS
+  // =========================================================================
   THINGSPEAK_BASE_URL: "https://api.thingspeak.com",
-  MAX_POINTS_PER_REQUEST: 8000,      // Max points ThingSpeak returns per query
-  MAX_RETRIES: 3,                    // Automatic retries on network error
-  RETRY_DELAY_MS: 3000,              // Retry backoff delay (ms)
-  OFFLINE_THRESHOLD_MULTIPLIER: 3.0, // Mark device OFFLINE if no data for 3x interval (90s)
+  MAX_POINTS_PER_REQUEST: 8000,
+  MAX_RETRIES: 3,
+  RETRY_DELAY_MS: 3000,
+  OFFLINE_THRESHOLD_MULTIPLIER: 3.0,
 
-  // =========================================================
-  // DHT11 SENSOR PHYSICAL CAPABILITIES & CONSTRAINTS
-  // =========================================================
+  // =========================================================================
+  // DHT11 SENSOR SPECIFICATIONS
+  // =========================================================================
   DHT11: {
-    TEMP_MIN: 0.0,                   // Minimum measurable temperature (°C)
-    TEMP_MAX: 50.0,                  // Maximum measurable temperature (°C)
-    TEMP_ACCURACY: 2.0,              // Nominal accuracy (±2 °C)
-    HUM_MIN: 20.0,                   // Minimum measurable relative humidity (%)
-    HUM_MAX: 90.0,                   // Maximum measurable relative humidity (%)
-    HUM_ACCURACY: 5.0,               // Nominal accuracy (±5 % RH)
-    RESOLUTION_TEMP: 1.0,            // Output resolution ~1 °C
-    RESOLUTION_HUM: 1.0,             // Output resolution ~1 %
-    FLATLINE_MINUTES_SUSPICIOUS: 60  // Flatlining threshold considering 1°C steps
+    TEMP_MIN: 0.0,
+    TEMP_MAX: 50.0,
+    TEMP_ACCURACY: 2.0,
+    HUM_MIN: 20.0,
+    HUM_MAX: 90.0,
+    HUM_ACCURACY: 5.0,
+    RESOLUTION_TEMP: 1.0,
+    RESOLUTION_HUM: 1.0,
+    FLATLINE_MINUTES_SUSPICIOUS: 60
+  },
+
+  // Helper getters supporting both js/config.js and in-browser settings modal
+  getChannelId() {
+    const saved = localStorage.getItem("coolchain_channel_id");
+    if (saved && saved.trim() !== "") return saved.trim();
+    return CONFIG.CHANNEL_ID;
+  },
+
+  getReadApiKey() {
+    const saved = localStorage.getItem("coolchain_read_api_key");
+    if (saved && saved.trim() !== "") return saved.trim();
+    return CONFIG.READ_API_KEY;
+  },
+
+  setCredentials(channelId, readKey) {
+    if (channelId && channelId.trim()) {
+      localStorage.setItem("coolchain_channel_id", channelId.trim());
+    } else {
+      localStorage.removeItem("coolchain_channel_id");
+    }
+    if (readKey && readKey.trim()) {
+      localStorage.setItem("coolchain_read_api_key", readKey.trim());
+    } else {
+      localStorage.removeItem("coolchain_read_api_key");
+    }
   }
 };
 
@@ -55,11 +81,10 @@ const CONFIG = {
  * @returns {boolean} True if using placeholder credentials
  */
 function isDemoMode() {
-  return !CONFIG.CHANNEL_ID || 
-         CONFIG.CHANNEL_ID.trim() === "" || 
-         CONFIG.CHANNEL_ID === "YOUR_CHANNEL_ID";
+  const cid = CONFIG.getChannelId();
+  return !cid || cid.trim() === "" || cid === "YOUR_CHANNEL_ID";
 }
 
-// Export to window
+// Global exposure
 window.CONFIG = CONFIG;
 window.isDemoMode = isDemoMode;

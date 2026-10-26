@@ -253,5 +253,22 @@
     "baseShelfLifeDays": 180,
     "q10Factor": 2.0,
     "notes": "NOTICE: Requires temperature <= -18 °C. Outside DHT11 physical measuring limits!"
+  },
+  {
+    "id": "custom",
+    "name": "Custom Product (User Defined)",
+    "emoji": "🛠️",
+    "category": "Custom",
+    "tempMin": 2.0,
+    "tempMax": 8.0,
+    "setpoint": 5.0,
+    "humMin": 30.0,
+    "humMax": 60.0,
+    "warningMarginTemp": 0.5,
+    "warningMarginHum": 3.0,
+    "gracePeriodMinutes": 5,
+    "baseShelfLifeDays": 30,
+    "q10Factor": 2.0,
+    "notes": "User-customized storage profile. Click Edit (pencil icon) to set your required temperature and humidity bounds."
   }
 ]

@@ -25,28 +25,33 @@
 
 ## 🚀 Quick Start: Web Dashboard Setup
 
-### 1. Connecting Your ThingSpeak Channel
-The website is completely pre-configured. To connect your live ESP32 device, edit **only one file**:
+### 1. Where to Place Your ThingSpeak API Key & Channel ID
 
-Open [`js/config.js`](file:///d:/arduino_codes/js/config.js):
+You have **two ways** to connect your live ThingSpeak data:
+
+#### Method A: Directly from the Website (Easiest — No code editing!)
+1. Open your published website on GitHub Pages.
+2. In the top bar, click the **`⚙️ Connect API Key`** button.
+3. Paste your **Channel ID** and **Read API Key**.
+4. Click **Save & Connect**. The dashboard will immediately start pulling your live ESP32 telemetry!
+
+#### Method B: In Code (`js/config.js`)
+Open [`js/config.js`](file:///d:/arduino_codes/js/config.js) and edit lines 17 and 18:
 
 ```javascript
 const CONFIG = {
-  // Replace with your numeric ThingSpeak Channel ID:
-  CHANNEL_ID: "YOUR_CHANNEL_ID",      // e.g. "2741920"
+  // Line 17: Replace with your numeric ThingSpeak Channel ID:
+  CHANNEL_ID: "2741920",              // <--- Your Channel ID here
 
-  // Replace with your 16-character ThingSpeak READ API Key:
-  READ_API_KEY: "YOUR_READ_API_KEY",  // e.g. "ABC123XYZ456DEF7"
-  
-  REFRESH_SECONDS: 30,                // Browser auto-refresh interval
-  DEVICE_INTERVAL_SECONDS: 30,         // Telemetry publication rate
-  DEFAULT_PRODUCT: "vaccines",         // Initial selected product
+  // Line 18: Replace with your 16-character ThingSpeak READ API Key:
+  READ_API_KEY: "YOUR_READ_API_KEY",  // <--- Your Read Key here (NOT your Write key!)
+  ...
 };
 ```
 
 > [!CAUTION]
 > **Security Notice**:
-> - Only enter your **READ API Key** in `js/config.js`.
+> - Only enter your **READ API Key** in `js/config.js` or in the web modal.
 > - **NEVER** place your **Write API Key**, WiFi passwords, or private account keys in `config.js` or any client-side file.
 > - The Read API Key is visible to web visitors; keep your ThingSpeak write key strictly on the ESP32 firmware.
 

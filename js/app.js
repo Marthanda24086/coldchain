@@ -109,8 +109,8 @@ const App = (() => {
 
   async function fetchThingSpeak(startDate, endDate) {
     const base    = CONFIG.THINGSPEAK_BASE_URL;
-    const cid     = CONFIG.CHANNEL_ID;
-    const key     = CONFIG.READ_API_KEY;
+    const cid     = CONFIG.getChannelId ? CONFIG.getChannelId() : CONFIG.CHANNEL_ID;
+    const key     = CONFIG.getReadApiKey ? CONFIG.getReadApiKey() : CONFIG.READ_API_KEY;
     const maxPts  = CONFIG.MAX_POINTS_PER_REQUEST;
 
     // Fetch channel info once
@@ -807,9 +807,11 @@ const App = (() => {
     if (!sel) return;
     const products = window.productManager.getProducts();
     const activeId = window.productManager.activeProductId;
-    sel.innerHTML = products.map(p =>
-      `<option value="${p.id}" ${p.id === activeId ? "selected" : ""}>${p.emoji} ${p.name}</option>`
+    let opts = products.map(p =>
+      `<option value="${p.id}" ${p.id === activeId ? "selected" : ""}>${p.emoji} ${p.name} (${p.tempMin}° to ${p.tempMax}°C)</option>`
     ).join("");
+    opts += `<option value="__custom_new__">➕ Create New Custom Product...</option>`;
+    sel.innerHTML = opts;
   }
 
   // ── NOTIFICATIONS & AUDIO ─────────────────────────────────────────────────
@@ -886,6 +888,11 @@ const App = (() => {
     // Product selector change
     const sel = el("product-selector");
     if (sel) sel.addEventListener("change", e => {
+      if (e.target.value === "__custom_new__") {
+        openEditProduct(null);
+        e.target.value = window.productManager.activeProductId;
+        return;
+      }
       window.productManager.setActiveProduct(e.target.value);
       refresh();
     });
@@ -1062,6 +1069,34 @@ const App = (() => {
     if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
   }
 
+  function openApiSettingsModal() {
+    const modal = el("api-settings-modal");
+    if (!modal) return;
+    const cidInput = el("api-channel-id-input");
+    const keyInput = el("api-read-key-input");
+    if (cidInput) cidInput.value = (CONFIG.getChannelId() === "YOUR_CHANNEL_ID") ? "" : CONFIG.getChannelId();
+    if (keyInput) keyInput.value = (CONFIG.getReadApiKey() === "YOUR_READ_API_KEY") ? "" : CONFIG.getReadApiKey();
+    modal.hidden = false;
+  }
+
+  function saveApiSettings() {
+    const cid = (el("api-channel-id-input")?.value || "").trim();
+    const key = (el("api-read-key-input")?.value || "").trim();
+    CONFIG.setCredentials(cid, key);
+    el("api-settings-modal").hidden = true;
+    channelInfo = null;
+    allReadings = [];
+    refresh();
+  }
+
+  function resetApiSettingsToDemo() {
+    CONFIG.setCredentials("", "");
+    el("api-settings-modal").hidden = true;
+    channelInfo = null;
+    allReadings = [];
+    refresh();
+  }
+
   // Public API
   return {
     init,
@@ -1077,7 +1112,10 @@ const App = (() => {
     exportExcursionsCSV,
     exportStatsCSV,
     printReport,
-    playAlarmChime
+    playAlarmChime,
+    openApiSettingsModal,
+    saveApiSettings,
+    resetApiSettingsToDemo
   };
 })();
 

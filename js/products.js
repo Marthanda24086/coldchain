@@ -259,6 +259,23 @@ const DEFAULT_PRODUCTS_FALLBACK = [
     "baseShelfLifeDays": 180,
     "q10Factor": 2.0,
     "notes": "NOTICE: Requires temperature <= -18 °C. Outside DHT11 physical measuring limits!"
+  },
+  {
+    "id": "custom",
+    "name": "Custom Product (User Defined)",
+    "emoji": "🛠️",
+    "category": "Custom",
+    "tempMin": 2.0,
+    "tempMax": 8.0,
+    "setpoint": 5.0,
+    "humMin": 30.0,
+    "humMax": 60.0,
+    "warningMarginTemp": 0.5,
+    "warningMarginHum": 3.0,
+    "gracePeriodMinutes": 5,
+    "baseShelfLifeDays": 30,
+    "q10Factor": 2.0,
+    "notes": "User-customized storage profile. Click Edit (pencil icon) to set your required temperature and humidity bounds."
   }
 ];
 
@@ -270,7 +287,8 @@ class ProductManager {
     this.calibrationKey = "coolchain_calibration_offsets";
     this.guardBandKey = "coolchain_guard_band_enabled";
 
-    this.products = [];
+    // Synchronous immediate initialization (no network race conditions)
+    this.products = [...DEFAULT_PRODUCTS_FALLBACK];
     this.activeProductId = CONFIG.DEFAULT_PRODUCT || "vaccines";
     this.batches = [];
     this.activeBatchId = null;
@@ -280,34 +298,27 @@ class ProductManager {
     this.init();
   }
 
-  async init() {
+  init() {
     this.loadCalibration();
     this.loadGuardBand();
     this.loadBatches();
-    await this.loadProducts();
+    this.loadProducts();
   }
 
-  async loadProducts() {
+  loadProducts() {
     const saved = localStorage.getItem(this.storageKey);
     if (saved) {
       try {
-        this.products = JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          this.products = parsed;
+        }
       } catch (e) {
         console.warn("Failed to parse stored products, resetting to defaults", e);
         this.products = [...DEFAULT_PRODUCTS_FALLBACK];
       }
     } else {
-      try {
-        const res = await fetch("data/default-products.json");
-        if (res.ok) {
-          this.products = await res.json();
-        } else {
-          this.products = [...DEFAULT_PRODUCTS_FALLBACK];
-        }
-      } catch (err) {
-        // Fallback for file:// or offline
-        this.products = [...DEFAULT_PRODUCTS_FALLBACK];
-      }
+      this.products = [...DEFAULT_PRODUCTS_FALLBACK];
       this.saveProducts();
     }
 
