@@ -1,0 +1,839 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CoolChain: Cold Chain Monitoring</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>❄️</text></svg>">
+
+  <!-- Chart.js and Date Adapter (Pinned Versions) -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/date-fns@3.3.1/cdn.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+</head>
+<body>
+
+  <!-- App Layout -->
+  <div class="app-container">
+
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar" id="sidebar">
+      <div class="brand-header">
+        <span class="brand-icon">❄️</span>
+        <div>
+          <div class="brand-title">CoolChain</div>
+          <div class="brand-tagline">Cold Chain Analytics</div>
+        </div>
+      </div>
+
+      <ul class="nav-menu">
+        <li><a class="nav-link nav-active" data-section="live"><span>📊</span> Live Overview</a></li>
+        <li><a class="nav-link" data-section="products"><span>📦</span> Products &amp; Batches</a></li>
+        <li><a class="nav-link" data-section="stats"><span>📈</span> Statistical Analytics</a></li>
+        <li><a class="nav-link" data-section="compliance"><span>🛡️</span> Compliance &amp; Excursions</a></li>
+        <li><a class="nav-link" data-section="freshness"><span>⏳</span> Freshness &amp; Shelf Life</a></li>
+        <li><a class="nav-link" data-section="trends"><span>📉</span> Trends &amp; Patterns</a></li>
+        <li><a class="nav-link" data-section="anomalies"><span>🔍</span> Anomaly Detection</a></li>
+        <li><a class="nav-link" data-section="health"><span>📡</span> Device &amp; Data Health</a></li>
+        <li><a class="nav-link" data-section="reports"><span>📋</span> Reports &amp; Raw Data</a></li>
+        <li><a class="nav-link" data-section="about"><span>ℹ️</span> About &amp; Architecture</a></li>
+      </ul>
+
+      <div class="sidebar-footer">
+        <div>ESP32 + DHT11 IoT Node</div>
+        <div style="margin-top: 0.25rem;">GitHub Pages Ready</div>
+      </div>
+    </aside>
+
+    <!-- Main Workspace Area -->
+    <div class="main-wrapper">
+
+      <!-- Sticky Top Bar -->
+      <header class="top-bar">
+        <div class="top-bar-left">
+          <button class="mobile-menu-btn" onclick="document.getElementById('sidebar').classList.toggle('mobile-open')">☰</button>
+
+          <!-- Active Product Dropdown -->
+          <div class="product-selector-wrap" title="Active monitored product profile">
+            <span style="font-size: 1.1rem;">📦</span>
+            <select id="product-selector" class="form-select">
+              <!-- populated dynamically -->
+            </select>
+            <button class="btn btn-sm btn-outline" id="btn-quick-edit" title="Quick edit active limits">✏️</button>
+          </div>
+
+          <!-- Status Badge -->
+          <div id="status-badge" class="status-badge status-safe" title="Live status">CHECKING...</div>
+
+          <!-- Topbar Realtime Pills -->
+          <span class="live-metric-pill" title="Current Temperature">🌡 <strong id="topbar-temp">—</strong></span>
+          <span class="live-metric-pill" title="Current Humidity">💧 <strong id="topbar-hum">—</strong></span>
+        </div>
+
+        <div class="top-bar-right">
+          <!-- Time Range Selector -->
+          <select id="time-range-selector" class="form-select" style="background:var(--bg-surface-elevated); padding:0.3rem 0.6rem; border-radius:var(--radius-sm); border:1px solid var(--border);">
+            <option value="1">Last 1 Hour</option>
+            <option value="6">Last 6 Hours</option>
+            <option value="24" selected>Last 24 Hours</option>
+            <option value="168">Last 7 Days</option>
+            <option value="720">Last 30 Days</option>
+            <option value="batch">Current Batch</option>
+            <option value="custom">Custom Range...</option>
+          </select>
+
+          <!-- Auto Refresh Toggle -->
+          <label style="font-size: 0.8rem; display: flex; align-items: center; gap: 0.35rem; cursor: pointer;">
+            <input type="checkbox" id="auto-refresh-toggle" checked>
+            <span>Auto (30s)</span>
+          </label>
+
+          <!-- Last Updated -->
+          <span style="font-size: 0.75rem; color: var(--text-muted);" title="Last refresh timestamp">Updated: <strong id="last-updated">—</strong></span>
+
+          <!-- Guard Band Toggle -->
+          <label style="font-size: 0.8rem; display: flex; align-items: center; gap: 0.35rem; cursor: pointer;" title="Treat readings within ±2°C / ±5% RH sensor accuracy as Uncertain">
+            <input type="checkbox" id="guard-band-toggle" checked>
+            <span>Guard Band</span>
+          </label>
+
+          <!-- Notification Permission -->
+          <button class="btn btn-sm btn-outline" id="btn-notify" title="Toggle audio and browser breach alerts">🔔</button>
+
+          <!-- Theme Toggle -->
+          <button class="btn btn-sm btn-outline" id="theme-toggle">🌙 Dark</button>
+        </div>
+      </header>
+
+      <!-- Custom Range Picker Form (Conditional) -->
+      <div id="custom-range-form" class="banner banner-info" hidden>
+        <div style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">
+          <span><strong>Custom Range:</strong></span>
+          <label>Start: <input type="datetime-local" id="custom-range-start" class="form-input" style="width:auto; padding:0.2rem;"></label>
+          <label>End: <input type="datetime-local" id="custom-range-end" class="form-input" style="width:auto; padding:0.2rem;"></label>
+          <button class="btn btn-sm" id="custom-range-apply">Apply Range</button>
+        </div>
+      </div>
+
+      <!-- Demo Mode Banner -->
+      <div id="banner-demo" class="banner banner-info" hidden></div>
+
+      <!-- Error / Network Banner -->
+      <div id="banner-error" class="banner banner-error" hidden></div>
+
+      <!-- Main Content Container -->
+      <main class="content-area">
+
+        <!-- ================================================================ -->
+        <!-- SECTION 1: LIVE OVERVIEW                                         -->
+        <!-- ================================================================ -->
+        <section id="section-live" class="section-panel">
+
+          <!-- Descriptive Status Banner -->
+          <div id="live-status-banner" class="status-banner safe">
+            <p>Initializing telemetry stream...</p>
+          </div>
+
+          <!-- Sensor Capability / Measuring Range Warning (DHT11 Limitations) -->
+          <div id="sensor-cap-warning" class="banner banner-error" style="border-radius: var(--radius-md);" hidden></div>
+
+          <!-- Calibration Active Badge -->
+          <div id="calibration-badge" class="badge badge-info" style="align-self: flex-start;" hidden></div>
+
+          <!-- KPI Cards Grid -->
+          <div class="kpi-grid">
+            <div class="kpi-card">
+              <div class="kpi-label">Current Temperature</div>
+              <div class="kpi-value-row">
+                <span class="kpi-value" id="kpi-temp-val">—</span>
+                <span class="kpi-trend" id="kpi-temp-trend">→</span>
+              </div>
+              <div class="sparkline-wrap"><canvas id="spark-temp"></canvas></div>
+            </div>
+
+            <div class="kpi-card">
+              <div class="kpi-label">Current Humidity</div>
+              <div class="kpi-value-row">
+                <span class="kpi-value" id="kpi-hum-val">—</span>
+                <span class="kpi-trend" id="kpi-hum-trend">→</span>
+              </div>
+              <div class="sparkline-wrap"><canvas id="spark-hum"></canvas></div>
+            </div>
+
+            <div class="kpi-card">
+              <div class="kpi-label">Site Rolling Avg (12-Sample)</div>
+              <div class="kpi-value-row">
+                <span class="kpi-value" id="kpi-rolling-val">—</span>
+                <span style="font-size:0.8rem; color:var(--text-muted);">Recomputed</span>
+              </div>
+              <div style="font-size:0.75rem; color:var(--text-muted); margin-top:0.75rem;">Smoothed moving average filter</div>
+            </div>
+
+            <div class="kpi-card">
+              <div class="kpi-label">Deviation from Setpoint</div>
+              <div class="kpi-value-row">
+                <span class="kpi-value" id="kpi-dev-val">—</span>
+                <span style="font-size:0.8rem; color:var(--text-muted);">Target</span>
+              </div>
+              <div style="font-size:0.75rem; color:var(--text-muted); margin-top:0.75rem;">Relative to active product setpoint</div>
+            </div>
+          </div>
+
+          <!-- Device Alarm Indicator & Mismatch Notice -->
+          <div class="device-alarm-box">
+            <div>
+              <strong>ESP32 Hardware Telemetry:</strong>
+              <span id="device-alarm-badge" style="margin-left: 0.5rem; font-weight: 600;">Checking…</span>
+            </div>
+            <div id="device-alarm-mismatch" class="mismatch-callout" hidden></div>
+          </div>
+
+          <!-- Live Chart Card -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">📈 Real-Time Environmental Telemetry &amp; Product Boundaries</div>
+              <button class="btn btn-sm btn-outline no-print" onclick="Charts.downloadChart('live', 'coolchain_live_chart.png')">📷 Download PNG</button>
+            </div>
+            <div class="chart-container">
+              <canvas id="chart-live"></canvas>
+            </div>
+          </div>
+        </section>
+
+        <!-- ================================================================ -->
+        <!-- SECTION 0: PRODUCTS & BATCHES                                    -->
+        <!-- ================================================================ -->
+        <section id="section-products" class="section-panel" hidden>
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">📦 Product Storage Profiles</div>
+              <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+                <button class="btn btn-sm" id="btn-add-product">+ New Profile</button>
+                <button class="btn btn-sm btn-outline" id="btn-export-products">Export JSON</button>
+                <button class="btn btn-sm btn-outline" id="btn-import-products">Import JSON</button>
+                <button class="btn btn-sm btn-danger" id="btn-reset-products">Reset to Defaults</button>
+              </div>
+            </div>
+            <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:1rem;">
+              Storage requirements adapt all analytics, alarms, MKT evaluations, and shelf-life forecasts in real time. 
+              <em>Note: Typical values provided for reference; always verify with official regulations and product labeling.</em>
+            </p>
+            <div id="products-grid" class="products-grid">
+              <!-- Dynamically populated -->
+            </div>
+          </div>
+
+          <!-- Batch Management Card -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">🏷️ Cold Chain Batches &amp; Consignments</div>
+            </div>
+            <div style="display:flex; gap:0.75rem; flex-wrap:wrap; margin-bottom:1rem; align-items:flex-end;">
+              <div class="form-group" style="margin-bottom:0;">
+                <label>Batch Name / Lot Number</label>
+                <input type="text" id="batch-name-input" class="form-input" placeholder="e.g. Lot #VAX-2026-09">
+              </div>
+              <div class="form-group" style="margin-bottom:0;">
+                <label>Optional Notes</label>
+                <input type="text" id="batch-notes-input" class="form-input" placeholder="e.g. Courier: PharmaExpress Box 4">
+              </div>
+              <button class="btn" id="btn-start-batch">Start New Batch</button>
+            </div>
+
+            <div class="table-responsive">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Batch ID</th>
+                    <th>Name</th>
+                    <th>Product</th>
+                    <th>Started</th>
+                    <th>Ended</th>
+                    <th>Duration</th>
+                    <th>Status</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="batches-table-body">
+                  <!-- Dynamically populated -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Sensor Calibration Card -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">⚖️ Sensor Calibration Offsets (Reference Thermometer)</div>
+            </div>
+            <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:1rem;">
+              Apply linear calibration correction offsets measured against a calibrated laboratory reference thermometer or psychrometer. Stored locally.
+            </p>
+            <div style="display:flex; gap:1rem; flex-wrap:wrap; align-items:flex-end;">
+              <div class="form-group" style="margin-bottom:0;">
+                <label>Temperature Offset (°C)</label>
+                <input type="number" step="0.1" id="cal-temp-offset" class="form-input" value="0.0" style="width:140px;">
+              </div>
+              <div class="form-group" style="margin-bottom:0;">
+                <label>Humidity Offset (% RH)</label>
+                <input type="number" step="0.1" id="cal-hum-offset" class="form-input" value="0.0" style="width:140px;">
+              </div>
+              <button class="btn" id="calibration-apply">Save Calibration</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ================================================================ -->
+        <!-- SECTION 2: STATISTICAL ANALYTICS                                 -->
+        <!-- ================================================================ -->
+        <section id="section-stats" class="section-panel" hidden>
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">📊 Parametric &amp; Non-Parametric Statistics</div>
+              <button class="btn btn-sm btn-outline no-print" id="btn-export-stats-csv">Export Stats CSV</button>
+            </div>
+            <div id="stats-content">
+              <!-- Dynamically populated -->
+            </div>
+          </div>
+        </section>
+
+        <!-- ================================================================ -->
+        <!-- SECTION 3: COMPLIANCE & EXCURSIONS                               -->
+        <!-- ================================================================ -->
+        <section id="section-compliance" class="section-panel" hidden>
+          <div class="grid-2">
+            <!-- Score Card -->
+            <div class="card score-card">
+              <div class="card-title" style="justify-content: center;">🛡️ Overall Compliance Score</div>
+              <div class="score-value" id="compliance-score-val">—</div>
+              <p style="font-size:0.85rem; color:var(--text-muted);">
+                Calculated via 70% time-in-range weight + 30% data completeness bonus, penalized for critical/major excursions and grace period violations.
+              </p>
+              <div style="display:flex; justify-content:space-around; margin-top:1rem; font-size:0.9rem;">
+                <div>Time In Range: <strong id="compliance-time-in-range">—</strong></div>
+                <div>Duration: <strong id="compliance-time-in-range-dur">—</strong></div>
+              </div>
+              <div style="display:flex; justify-content:space-around; margin-top:0.5rem; font-size:0.8rem; color:var(--text-muted);">
+                <div>Time Above Max: <span id="compliance-time-above">—</span></div>
+                <div>Time Below Min: <span id="compliance-time-below">—</span></div>
+              </div>
+            </div>
+
+            <!-- Donut Chart -->
+            <div class="card">
+              <div class="card-title">⏱️ Time in Specification Range</div>
+              <div class="chart-container-sm">
+                <canvas id="chart-compliance-donut"></canvas>
+              </div>
+            </div>
+          </div>
+
+          <!-- Excursion Log Table -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">🚨 Temperature &amp; Humidity Excursion Log</div>
+              <div style="display:flex; gap:0.5rem;">
+                <button class="btn btn-sm btn-outline no-print" id="btn-export-excursions-csv">Export Excursions CSV</button>
+              </div>
+            </div>
+            <div id="longest-excursion" style="font-size:0.85rem; margin-bottom:0.75rem; color:var(--text-secondary);"></div>
+            <div class="table-responsive">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Start Time</th>
+                    <th>End Time</th>
+                    <th>Duration</th>
+                    <th>Parameter</th>
+                    <th>Direction</th>
+                    <th>Peak Value</th>
+                    <th>Severity</th>
+                    <th>Grace Exceeded?</th>
+                  </tr>
+                </thead>
+                <tbody id="excursion-table-body">
+                  <!-- Dynamically populated -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Excursions per day chart -->
+          <div class="card">
+            <div class="card-title">📅 Excursion Frequency per Day</div>
+            <div class="chart-container-sm">
+              <canvas id="chart-excursions-per-day"></canvas>
+            </div>
+          </div>
+
+          <!-- Storage Suitability Matrix -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">🔍 Storage Suitability Matrix ("What could I safely store here?")</div>
+            </div>
+            <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:1rem;">
+              Simulates recorded environmental conditions across all available product profiles in your catalog to evaluate which products would comply.
+            </p>
+            <div class="table-responsive">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Product Profile</th>
+                    <th>Time in Range (%)</th>
+                    <th>Excursions</th>
+                    <th>Grace Violations</th>
+                    <th>Suitability Verdict</th>
+                  </tr>
+                </thead>
+                <tbody id="suitability-matrix-body">
+                  <!-- Dynamically populated -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ================================================================ -->
+        <!-- SECTION 4: FRESHNESS & SHELF LIFE                                -->
+        <!-- ================================================================ -->
+        <section id="section-freshness" class="section-panel" hidden>
+          <div class="grid-3">
+            <div class="card" style="text-align:center;">
+              <div class="card-title" style="justify-content:center;">Freshness Status</div>
+              <div id="freshness-status" class="freshness-status-badge good" style="margin:1rem auto; display:inline-block; font-size:1.5rem; font-weight:700; padding:0.4rem 1.25rem; border-radius:9999px;">Good</div>
+              <p style="font-size:0.75rem; color:var(--text-muted);">Estimated via Arrhenius-derived Q10 degradation kinetic model.</p>
+            </div>
+            <div class="card">
+              <div class="card-title">Shelf Life Used</div>
+              <div style="font-size:2rem; font-weight:700; margin:0.5rem 0;" id="shelf-life-used-days">—</div>
+              <div style="font-size:0.9rem; color:var(--text-secondary);" id="shelf-life-used-pct">—</div>
+              <div style="font-size:0.75rem; color:var(--status-breach); margin-top:0.5rem;" id="shelf-life-extra-loss">—</div>
+            </div>
+            <div class="card">
+              <div class="card-title">Remaining Shelf Life</div>
+              <div style="font-size:2rem; font-weight:700; margin:0.5rem 0; color:var(--accent-teal);" id="shelf-life-remaining">—</div>
+              <p style="font-size:0.75rem; color:var(--text-muted);">Days remaining if stored continuously at baseline target setpoint.</p>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">📉 Cumulative Shelf Life Consumption Over Time</div>
+              <button class="btn btn-sm btn-outline no-print" onclick="Charts.downloadChart('shelfLife', 'coolchain_shelflife_chart.png')">📷 Download PNG</button>
+            </div>
+            <div class="chart-container">
+              <canvas id="chart-shelf-life"></canvas>
+            </div>
+          </div>
+        </section>
+
+        <!-- ================================================================ -->
+        <!-- SECTION 5: TRENDS & PATTERNS                                     -->
+        <!-- ================================================================ -->
+        <section id="section-trends" class="section-panel" hidden>
+          <!-- Moving Averages -->
+          <div class="card">
+            <div class="card-title">📈 Short-term (5-min) vs Long-term (1-hour) Moving Averages</div>
+            <div class="chart-container">
+              <canvas id="chart-moving-avg"></canvas>
+            </div>
+          </div>
+
+          <!-- SPC Control Chart -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">🎯 Statistical Process Control (SPC) Chart (±1σ, ±2σ, ±3σ)</div>
+              <button class="btn btn-sm btn-outline no-print" onclick="Charts.downloadChart('spc', 'coolchain_spc_chart.png')">📷 Download PNG</button>
+            </div>
+            <div class="chart-container">
+              <canvas id="chart-spc"></canvas>
+            </div>
+          </div>
+
+          <!-- Histograms -->
+          <div class="grid-2">
+            <div class="card">
+              <div class="card-title">📊 Temperature Frequency Distribution</div>
+              <div class="chart-container-sm">
+                <canvas id="chart-hist-temp"></canvas>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-title">📊 Humidity Frequency Distribution</div>
+              <div class="chart-container-sm">
+                <canvas id="chart-hist-hum"></canvas>
+              </div>
+            </div>
+          </div>
+
+          <!-- Diurnal Heatmap -->
+          <div class="card">
+            <div class="card-title">🗺️ Diurnal Heatmap (Average Temperature by Hour of Day vs Day of Week)</div>
+            <div id="heatmap-container">
+              <!-- Dynamically rendered -->
+            </div>
+          </div>
+
+          <!-- Scatter & Regression -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">🔄 Temperature vs. Humidity Correlation Scatter</div>
+              <span id="scatter-correlation" style="font-weight:600; font-size:0.85rem;">—</span>
+            </div>
+            <div class="chart-container-sm">
+              <canvas id="chart-scatter"></canvas>
+            </div>
+          </div>
+
+          <!-- Linear Projection -->
+          <div class="card">
+            <div class="card-title">🔮 Trajectory Linear Projection (1 to 3 Hours)</div>
+            <div class="grid-3" style="margin-top:1rem;">
+              <div class="card" style="background:var(--bg-surface-elevated);">
+                <div class="kpi-label">Current Drift Rate</div>
+                <div style="font-size:1.4rem; font-weight:700;" id="projection-slope">—</div>
+              </div>
+              <div class="card" style="background:var(--bg-surface-elevated);">
+                <div class="kpi-label">Projected @ +1 Hour</div>
+                <div style="font-size:1.4rem; font-weight:700;" id="projection-60">—</div>
+              </div>
+              <div class="card" style="background:var(--bg-surface-elevated);">
+                <div class="kpi-label">Projected @ +3 Hours</div>
+                <div style="font-size:1.4rem; font-weight:700;" id="projection-180">—</div>
+              </div>
+            </div>
+            <div id="projection-warning" class="banner banner-error" style="border-radius:var(--radius-sm); margin-top:1rem;" hidden></div>
+          </div>
+        </section>
+
+        <!-- ================================================================ -->
+        <!-- SECTION 6: ANOMALY DETECTION                                     -->
+        <!-- ================================================================ -->
+        <section id="section-anomalies" class="section-panel" hidden>
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">🔍 Heuristic &amp; Statistical Anomaly Detection</div>
+              <div style="display:flex; align-items:center; gap:0.75rem;">
+                <label style="font-size:0.85rem;">Sensitivity: <strong id="anomaly-sensitivity-val">3.0</strong>σ</label>
+                <input type="range" id="anomaly-sensitivity" min="1.5" max="4.0" step="0.25" value="3.0">
+              </div>
+            </div>
+            <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:1rem;">
+              Evaluates Z-score deviations, IQR outliers, rapid temperature jumps, prolonged flatlines (&gt;60 min accounting for DHT11 1°C steps), and refrigerator door-open signatures.
+            </p>
+            <div id="anomaly-count" style="font-weight:600; font-size:0.9rem; margin-bottom:0.75rem;">0 anomalies detected</div>
+            <div id="anomaly-list">
+              <!-- Dynamically populated -->
+            </div>
+          </div>
+        </section>
+
+        <!-- ================================================================ -->
+        <!-- SECTION 7: DEVICE & DATA HEALTH                                  -->
+        <!-- ================================================================ -->
+        <section id="section-health" class="section-panel" hidden>
+          <div class="grid-3">
+            <div class="card">
+              <div class="kpi-label">Data Completeness</div>
+              <div class="kpi-value" id="health-completeness">—</div>
+              <div style="font-size:0.8rem; color:var(--text-muted); margin-top:0.4rem;">Expected vs Received 30s points</div>
+            </div>
+            <div class="card">
+              <div class="kpi-label">Sensor Health Score</div>
+              <div class="kpi-value" id="health-sensor-score">—</div>
+              <div style="font-size:0.8rem; color:var(--text-muted); margin-top:0.4rem;">Based on range and noise checks</div>
+            </div>
+            <div class="card">
+              <div class="kpi-label">ESP32 Status</div>
+              <div class="kpi-value" id="health-status">—</div>
+              <div style="font-size:0.8rem; color:var(--text-muted); margin-top:0.4rem;">Last seen: <span id="health-last-seen">—</span></div>
+            </div>
+          </div>
+
+          <!-- Channel & Connectivity Meta -->
+          <div class="card">
+            <div class="card-title">📡 ThingSpeak Channel Metadata</div>
+            <div class="grid-2" style="margin-top:1rem; font-size:0.9rem;">
+              <div>
+                <p><strong>Channel Name:</strong> <span id="health-channel-name">—</span></p>
+                <p><strong>Channel ID:</strong> <span id="health-channel-id">—</span></p>
+                <p><strong>Channel Description:</strong> <span id="health-channel-desc">—</span></p>
+              </div>
+              <div>
+                <p><strong>Total Readings Recorded:</strong> <span id="health-total-readings">—</span></p>
+                <p><strong>Average Upload Interval:</strong> <span id="health-avg-interval">—</span></p>
+                <p><strong>First Telemetry Point:</strong> <span id="health-first-seen">—</span></p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Gaps List -->
+          <div class="card">
+            <div class="card-title">📶 Data Gaps Log (&gt; 90 Seconds)</div>
+            <div class="table-responsive" style="margin-top:0.75rem;">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Gap Start</th>
+                    <th>Gap End</th>
+                    <th>Duration</th>
+                  </tr>
+                </thead>
+                <tbody id="health-gaps-table-body">
+                  <!-- Dynamically populated -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Sensor Sanity Diagnostics -->
+          <div class="card">
+            <div class="card-title">🩺 DHT11 Hardware Sanity Checks</div>
+            <ul id="health-sanity-warnings" style="margin-top:0.75rem; padding-left:1.5rem; font-size:0.85rem; color:var(--text-secondary);">
+              <!-- Dynamically populated -->
+            </ul>
+          </div>
+        </section>
+
+        <!-- ================================================================ -->
+        <!-- SECTION 8: DATA, REPORTS & EXPORT                                -->
+        <!-- ================================================================ -->
+        <section id="section-reports" class="section-panel" hidden>
+
+          <!-- Audit Header for Print Only -->
+          <div class="print-only" style="margin-bottom:2rem;">
+            <h2>❄️ CoolChain Quality &amp; Regulatory Compliance Report</h2>
+            <p><strong>Generated At:</strong> <span id="print-date"></span></p>
+            <p><strong>Facility / Workspace:</strong> CoolChain Central Repository</p>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">📑 Compliance Report Generation &amp; Export</div>
+              <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+                <button class="btn btn-sm btn-outline no-print" id="btn-export-raw-csv">Download Raw CSV</button>
+                <button class="btn btn-sm no-print" id="btn-print-report">🖨️ Print / Save as PDF</button>
+              </div>
+            </div>
+            <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:1rem;">
+              Formal compliance documentation incorporating calibrated statistics, Mean Kinetic Temperature (MKT), complete excursion history, and auditor sign-off.
+            </p>
+
+            <div class="table-responsive">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Timestamp</th>
+                    <th>Temp (°C)</th>
+                    <th>Humidity (%)</th>
+                    <th>Device Avg (°C)</th>
+                    <th>Device Dev (%)</th>
+                    <th>Device Alarm</th>
+                    <th>Site Status</th>
+                  </tr>
+                </thead>
+                <tbody id="raw-table-body">
+                  <!-- Dynamically populated -->
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Pagination Bar -->
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-top:1rem; font-size:0.85rem;">
+              <span id="reports-page-info">Showing data...</span>
+              <div style="display:flex; gap:0.5rem; align-items:center;">
+                <label>Page:</label>
+                <input type="number" id="reports-page" min="1" value="1" style="width:60px;" class="form-input">
+              </div>
+            </div>
+          </div>
+
+          <!-- Auditor Signature Block (Print Only) -->
+          <div class="print-only audit-signature-block">
+            <div class="signature-line">Quality Assurance Officer</div>
+            <div class="signature-line">Operations Manager</div>
+            <div class="signature-line">Date &amp; Official Stamp</div>
+          </div>
+        </section>
+
+        <!-- ================================================================ -->
+        <!-- SECTION 9: ABOUT & ARCHITECTURE                                  -->
+        <!-- ================================================================ -->
+        <section id="section-about" class="section-panel" hidden>
+          <div class="card">
+            <div class="card-title">ℹ️ About CoolChain</div>
+            <p style="margin-top:0.75rem; font-size:0.9rem; color:var(--text-secondary); line-height:1.7;">
+              <strong>CoolChain</strong> is an IoT-driven cold chain monitoring and analytics architecture engineered for end-to-end supply chain compliance. 
+              By decoupling physical device telemetry from cloud data analytics, CoolChain allows users to monitor any product profile (vaccines, biologics, blood, fresh produce, etc.) 
+              with dynamic limit evaluation, shelf-life modeling, and statistical quality control — all running client-side with zero backend dependencies.
+            </p>
+
+            <!-- SVG Architecture Diagram -->
+            <div class="arch-diagram-wrap">
+              <svg viewBox="0 0 760 160" width="100%" height="160" xmlns="http://www.w3.org/2000/svg">
+                <rect x="10" y="30" width="120" height="90" rx="8" fill="#e0f2fe" stroke="#0072b2" stroke-width="2"/>
+                <text x="70" y="70" font-family="sans-serif" font-size="13" font-weight="bold" text-anchor="middle" fill="#0072b2">DHT11 Sensor</text>
+                <text x="70" y="90" font-family="sans-serif" font-size="10" text-anchor="middle" fill="#475569">Temp &amp; Humidity</text>
+
+                <path d="M 130 75 L 180 75" stroke="#0072b2" stroke-width="2" marker-end="url(#arrow)"/>
+
+                <rect x="180" y="30" width="130" height="90" rx="8" fill="#e0f2fe" stroke="#0072b2" stroke-width="2"/>
+                <text x="245" y="70" font-family="sans-serif" font-size="13" font-weight="bold" text-anchor="middle" fill="#0072b2">ESP32 MCU</text>
+                <text x="245" y="90" font-family="sans-serif" font-size="10" text-anchor="middle" fill="#475569">Local Buzzer + LED</text>
+
+                <path d="M 310 75 L 360 75" stroke="#0072b2" stroke-width="2"/>
+
+                <rect x="360" y="30" width="140" height="90" rx="8" fill="#e0f2fe" stroke="#0072b2" stroke-width="2"/>
+                <text x="430" y="70" font-family="sans-serif" font-size="13" font-weight="bold" text-anchor="middle" fill="#0072b2">ThingSpeak Cloud</text>
+                <text x="430" y="90" font-family="sans-serif" font-size="10" text-anchor="middle" fill="#475569">Channels REST API</text>
+
+                <path d="M 500 75 L 550 75" stroke="#0072b2" stroke-width="2"/>
+
+                <rect x="550" y="30" width="190" height="90" rx="8" fill="#0072b2" stroke="#0072b2" stroke-width="2"/>
+                <text x="645" y="65" font-family="sans-serif" font-size="13" font-weight="bold" text-anchor="middle" fill="#ffffff">CoolChain Web App</text>
+                <text x="645" y="85" font-family="sans-serif" font-size="10" text-anchor="middle" fill="#e0f2fe">Dynamic Product Analytics</text>
+                <text x="645" y="102" font-family="sans-serif" font-size="9" text-anchor="middle" fill="#e0f2fe">MKT • SPC • Q10 Shelf Life</text>
+              </svg>
+            </div>
+
+            <!-- Mathematical Formulations -->
+            <div style="margin-top:1.5rem;">
+              <h4>Analytical Formulations</h4>
+              <ul style="padding-left:1.5rem; font-size:0.85rem; color:var(--text-secondary); line-height:1.7; margin-top:0.5rem;">
+                <li><strong>Mean Kinetic Temperature (Haynes Equation):</strong> Evaluates non-linear accelerated chemical degradation using ΔH = 83.144 kJ/mol and R = 0.0083144 kJ/(mol·K).</li>
+                <li><strong>Q10 Shelf-Life Kinetic Model:</strong> Models aging rate multiplier as Aging = Q10^((T - Tref)/10) integrated over telemetry time steps.</li>
+                <li><strong>Statistical Process Control (SPC):</strong> Tracks Shewhart control limits (mean ± 1σ, 2σ, 3σ) to identify process instability.</li>
+                <li><strong>Dew Point (Magnus-Tetens):</strong> Computes surface condensation risks based on ambient temperature and relative humidity.</li>
+              </ul>
+            </div>
+
+            <!-- DHT11 Specs & Limitations -->
+            <div style="margin-top:1.5rem;">
+              <h4>DHT11 Physical Hardware Capabilities &amp; Limitations</h4>
+              <ul style="padding-left:1.5rem; font-size:0.85rem; color:var(--text-secondary); line-height:1.7; margin-top:0.5rem;">
+                <li><strong>Measuring Range:</strong> 0 °C to 50 °C (cannot measure frozen goods; use DS18B20 or PT100 for sub-zero).</li>
+                <li><strong>Accuracy:</strong> ±2.0 °C temperature accuracy; ±5.0 % relative humidity accuracy.</li>
+                <li><strong>Resolution:</strong> ~1.0 °C and ~1 % RH digital steps. Flatlining detection accounts for 1°C steps.</li>
+              </ul>
+            </div>
+
+            <!-- Team Credits -->
+            <div style="margin-top:1.5rem; padding-top:1rem; border-top:1px solid var(--border);">
+              <h4>Project Engineering Team</h4>
+              <p style="font-size:0.85rem; color:var(--text-secondary); margin-top:0.35rem;">
+                Developed by <strong>Ch. Marthanda Teja</strong> and <strong>A. Hari Eshan Reddy</strong> (CSE-B).
+              </p>
+            </div>
+          </div>
+        </section>
+
+      </main>
+    </div>
+  </div>
+
+  <!-- ==================================================================== -->
+  <!-- MODALS                                                               -->
+  <!-- ==================================================================== -->
+
+  <!-- Product Edit / Create Modal -->
+  <div id="product-modal" class="modal-overlay" hidden>
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="product-modal-title">Edit Product Profile</h3>
+        <button class="btn btn-sm btn-outline" id="product-form-cancel">✕</button>
+      </div>
+
+      <form id="product-form" onsubmit="event.preventDefault();">
+        <input type="hidden" name="id">
+
+        <div class="form-row">
+          <div class="form-group" style="width: 80px;">
+            <label>Emoji</label>
+            <input type="text" name="emoji" class="form-input" style="font-size: 1.5rem; text-align: center;" required>
+          </div>
+          <div class="form-group" style="flex-grow: 1;">
+            <label>Product Name</label>
+            <input type="text" name="name" class="form-input" required>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Category</label>
+          <input type="text" name="category" class="form-input" required>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group" style="flex:1;">
+            <label>Min Temp (°C)</label>
+            <input type="number" step="0.1" name="tempMin" class="form-input" required>
+          </div>
+          <div class="form-group" style="flex:1;">
+            <label>Max Temp (°C)</label>
+            <input type="number" step="0.1" name="tempMax" class="form-input" required>
+          </div>
+          <div class="form-group" style="flex:1;">
+            <label>Target Setpoint (°C)</label>
+            <input type="number" step="0.1" name="setpoint" class="form-input" required>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group" style="flex:1;">
+            <label>Min Humidity (% RH)</label>
+            <input type="number" step="1" name="humMin" class="form-input" required>
+          </div>
+          <div class="form-group" style="flex:1;">
+            <label>Max Humidity (% RH)</label>
+            <input type="number" step="1" name="humMax" class="form-input" required>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group" style="flex:1;">
+            <label>Temp Warn Margin (°C)</label>
+            <input type="number" step="0.1" name="warningMarginTemp" class="form-input" value="0.5">
+          </div>
+          <div class="form-group" style="flex:1;">
+            <label>Hum Warn Margin (%)</label>
+            <input type="number" step="0.5" name="warningMarginHum" class="form-input" value="3.0">
+          </div>
+          <div class="form-group" style="flex:1;">
+            <label>Grace Period (min)</label>
+            <input type="number" step="1" name="gracePeriodMinutes" class="form-input" value="5">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group" style="flex:1;">
+            <label>Base Shelf Life (days)</label>
+            <input type="number" step="1" name="baseShelfLifeDays" class="form-input" value="30">
+          </div>
+          <div class="form-group" style="flex:1;">
+            <label>Q10 Factor</label>
+            <input type="number" step="0.1" name="q10Factor" class="form-input" value="2.0">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Operational Notes / Citations</label>
+          <textarea name="notes" class="form-input" rows="2"></textarea>
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; gap:0.5rem; margin-top:1rem;">
+          <button type="button" class="btn btn-outline" onclick="document.getElementById('product-modal').hidden = true;">Cancel</button>
+          <button type="button" class="btn" id="product-form-save">Save Profile</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Core JavaScript Modules -->
+  <script src="js/config.js"></script>
+  <script src="js/products.js"></script>
+  <script src="js/analytics.js"></script>
+  <script src="js/charts.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
