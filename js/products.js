@@ -1,66 +1,68 @@
 /**
  * CoolChain Product & Batch Management
- * Handles product catalogs, localStorage persistence, DHT11 capability checks,
- * batches, calibration offsets, and uncertainty guard bands.
+ * Handles schema-driven product profiles, localStorage persistence,
+ * DHT11 capability checks, batches, and uncertainty guard bands.
  */
+
+const CATEGORY_SCHEMAS = {
+  "Pharmaceuticals": { hasHumidity: false, defaultGrace: 5 },
+  "Biologics & Clinical": { hasHumidity: false, defaultGrace: 0 },
+  "Perishable Foods & Dairy": { hasHumidity: true, defaultGrace: 10 },
+  "Fresh Produce": { hasHumidity: true, defaultGrace: 15 },
+  "Custom": { hasHumidity: true, defaultGrace: 5 }
+};
 
 const DEFAULT_PRODUCTS_FALLBACK = [
   {
     "id": "vaccines",
     "name": "Vaccines",
-    "emoji": "💉",
     "category": "Pharmaceuticals",
+    "hasHumidity": false,
     "tempMin": 2.0,
     "tempMax": 8.0,
     "setpoint": 5.0,
-    "humMin": 30.0,
-    "humMax": 60.0,
+    "humMin": null,
+    "humMax": null,
     "warningMarginTemp": 0.5,
-    "warningMarginHum": 3.0,
+    "warningMarginHum": null,
     "gracePeriodMinutes": 5,
-    "baseShelfLifeDays": 365,
-    "q10Factor": 2.0,
     "notes": "Typical WHO vaccine storage (2-8 °C). Always verify against product label."
   },
   {
     "id": "insulin",
     "name": "Insulin & Biologics",
-    "emoji": "🧪",
     "category": "Pharmaceuticals",
+    "hasHumidity": false,
     "tempMin": 2.0,
     "tempMax": 8.0,
     "setpoint": 5.0,
-    "humMin": 30.0,
-    "humMax": 60.0,
+    "humMin": null,
+    "humMax": null,
     "warningMarginTemp": 0.5,
-    "warningMarginHum": 3.0,
+    "warningMarginHum": null,
     "gracePeriodMinutes": 5,
-    "baseShelfLifeDays": 730,
-    "q10Factor": 2.0,
     "notes": "Must never freeze. Typical 2-8 °C storage for unopened vials."
   },
   {
     "id": "whole-blood",
     "name": "Whole Blood",
-    "emoji": "🩸",
-    "category": "Medical & Clinical",
+    "category": "Biologics & Clinical",
+    "hasHumidity": false,
     "tempMin": 2.0,
     "tempMax": 6.0,
     "setpoint": 4.0,
-    "humMin": 30.0,
-    "humMax": 60.0,
+    "humMin": null,
+    "humMax": null,
     "warningMarginTemp": 0.5,
-    "warningMarginHum": 3.0,
+    "warningMarginHum": null,
     "gracePeriodMinutes": 0,
-    "baseShelfLifeDays": 35,
-    "q10Factor": 2.2,
     "notes": "Strict 2-6 °C range with zero grace period for clinical transfusion safety."
   },
   {
     "id": "fresh-dairy",
     "name": "Fresh Milk & Dairy",
-    "emoji": "🥛",
-    "category": "Food & Beverage",
+    "category": "Perishable Foods & Dairy",
+    "hasHumidity": true,
     "tempMin": 1.0,
     "tempMax": 4.0,
     "setpoint": 2.5,
@@ -69,15 +71,13 @@ const DEFAULT_PRODUCTS_FALLBACK = [
     "warningMarginTemp": 0.5,
     "warningMarginHum": 3.0,
     "gracePeriodMinutes": 10,
-    "baseShelfLifeDays": 14,
-    "q10Factor": 2.0,
     "notes": "Rapid spoilage above 4 °C due to bacterial proliferation."
   },
   {
     "id": "fresh-meat",
     "name": "Fresh Meat & Poultry",
-    "emoji": "🥩",
-    "category": "Food & Beverage",
+    "category": "Perishable Foods & Dairy",
+    "hasHumidity": true,
     "tempMin": 0.0,
     "tempMax": 4.0,
     "setpoint": 2.0,
@@ -86,15 +86,13 @@ const DEFAULT_PRODUCTS_FALLBACK = [
     "warningMarginTemp": 0.5,
     "warningMarginHum": 3.0,
     "gracePeriodMinutes": 10,
-    "baseShelfLifeDays": 7,
-    "q10Factor": 2.1,
-    "notes": "Preserves color and inhibits pathogen growth in cold meat supply."
+    "notes": "Preserves freshness and inhibits pathogen growth in cold meat supply."
   },
   {
     "id": "fresh-fish",
     "name": "Fresh Fish & Seafood",
-    "emoji": "🐟",
-    "category": "Food & Beverage",
+    "category": "Perishable Foods & Dairy",
+    "hasHumidity": true,
     "tempMin": 0.0,
     "tempMax": 2.0,
     "setpoint": 1.0,
@@ -103,15 +101,13 @@ const DEFAULT_PRODUCTS_FALLBACK = [
     "warningMarginTemp": 0.5,
     "warningMarginHum": 3.0,
     "gracePeriodMinutes": 5,
-    "baseShelfLifeDays": 4,
-    "q10Factor": 2.5,
     "notes": "Optimal near melting ice temperature (0-2 °C)."
   },
   {
     "id": "eggs",
     "name": "Eggs (Table)",
-    "emoji": "🥚",
-    "category": "Food & Beverage",
+    "category": "Perishable Foods & Dairy",
+    "hasHumidity": true,
     "tempMin": 4.0,
     "tempMax": 7.0,
     "setpoint": 5.5,
@@ -120,66 +116,58 @@ const DEFAULT_PRODUCTS_FALLBACK = [
     "warningMarginTemp": 0.5,
     "warningMarginHum": 3.0,
     "gracePeriodMinutes": 15,
-    "baseShelfLifeDays": 28,
-    "q10Factor": 1.8,
     "notes": "Prevents Salmonella replication while avoiding condensation on shells."
   },
   {
     "id": "leafy-greens",
     "name": "Leafy Greens",
-    "emoji": "🥬",
-    "category": "Produce",
+    "category": "Fresh Produce",
+    "hasHumidity": true,
     "tempMin": 0.0,
     "tempMax": 4.0,
     "setpoint": 2.0,
-    "humMin": 90.0,
+    "humMin": 85.0,
     "humMax": 95.0,
     "warningMarginTemp": 0.5,
     "warningMarginHum": 2.0,
     "gracePeriodMinutes": 15,
-    "baseShelfLifeDays": 10,
-    "q10Factor": 2.0,
     "notes": "High humidity essential to prevent wilting. Freezing causes cellular rupture."
   },
   {
     "id": "berries",
     "name": "Berries (Strawberries/Blueberries)",
-    "emoji": "🍓",
-    "category": "Produce",
+    "category": "Fresh Produce",
+    "hasHumidity": true,
     "tempMin": 0.0,
     "tempMax": 4.0,
     "setpoint": 2.0,
-    "humMin": 90.0,
-    "humMax": 95.0,
+    "humMin": 85.0,
+    "humMax": 90.0,
     "warningMarginTemp": 0.5,
     "warningMarginHum": 2.0,
     "gracePeriodMinutes": 10,
-    "baseShelfLifeDays": 7,
-    "q10Factor": 2.2,
-    "notes": "Delicate fruit prone to rapid Botrytis grey mold if kept warm."
+    "notes": "Extremely fragile cold chain; rapid mold proliferation above 5 °C."
   },
   {
     "id": "apples",
-    "name": "Apples",
-    "emoji": "🍎",
-    "category": "Produce",
+    "name": "Apples & Pears",
+    "category": "Fresh Produce",
+    "hasHumidity": true,
     "tempMin": 1.0,
     "tempMax": 4.0,
     "setpoint": 2.5,
-    "humMin": 90.0,
-    "humMax": 95.0,
+    "humMin": 85.0,
+    "humMax": 90.0,
     "warningMarginTemp": 0.5,
-    "warningMarginHum": 2.0,
+    "warningMarginHum": 3.0,
     "gracePeriodMinutes": 30,
-    "baseShelfLifeDays": 120,
-    "q10Factor": 1.8,
-    "notes": "Controlled cold storage slows respiration and ethylene biosynthesis."
+    "notes": "Controlled atmosphere cold storage; sensitive to ethylene gas accumulation."
   },
   {
     "id": "tomatoes",
     "name": "Tomatoes (Ripe)",
-    "emoji": "🍅",
-    "category": "Produce",
+    "category": "Fresh Produce",
+    "hasHumidity": true,
     "tempMin": 12.0,
     "tempMax": 15.0,
     "setpoint": 13.5,
@@ -188,15 +176,13 @@ const DEFAULT_PRODUCTS_FALLBACK = [
     "warningMarginTemp": 0.5,
     "warningMarginHum": 3.0,
     "gracePeriodMinutes": 30,
-    "baseShelfLifeDays": 14,
-    "q10Factor": 1.8,
     "notes": "Chilling injury occurs below 10 °C causing mealy texture and flavor loss."
   },
   {
     "id": "bananas",
     "name": "Bananas (Green/Ripening)",
-    "emoji": "🍌",
-    "category": "Produce",
+    "category": "Fresh Produce",
+    "hasHumidity": true,
     "tempMin": 13.0,
     "tempMax": 15.0,
     "setpoint": 14.0,
@@ -205,15 +191,13 @@ const DEFAULT_PRODUCTS_FALLBACK = [
     "warningMarginTemp": 0.5,
     "warningMarginHum": 3.0,
     "gracePeriodMinutes": 30,
-    "baseShelfLifeDays": 10,
-    "q10Factor": 2.0,
     "notes": "Severe peel browning occurs when stored below 13 °C."
   },
   {
     "id": "chocolate",
     "name": "Chocolate & Confectionery",
-    "emoji": "🍫",
-    "category": "Confectionery",
+    "category": "Perishable Foods & Dairy",
+    "hasHumidity": true,
     "tempMin": 15.0,
     "tempMax": 18.0,
     "setpoint": 16.5,
@@ -222,49 +206,28 @@ const DEFAULT_PRODUCTS_FALLBACK = [
     "warningMarginTemp": 0.5,
     "warningMarginHum": 3.0,
     "gracePeriodMinutes": 45,
-    "baseShelfLifeDays": 365,
-    "q10Factor": 1.5,
     "notes": "High humidity causes sugar bloom; high heat causes fat bloom."
   },
   {
     "id": "crt-medicines",
     "name": "Controlled Room Temp (CRT) Meds",
-    "emoji": "💊",
     "category": "Pharmaceuticals",
+    "hasHumidity": false,
     "tempMin": 15.0,
     "tempMax": 25.0,
     "setpoint": 20.0,
-    "humMin": 30.0,
-    "humMax": 60.0,
+    "humMin": null,
+    "humMax": null,
     "warningMarginTemp": 1.0,
-    "warningMarginHum": 5.0,
+    "warningMarginHum": null,
     "gracePeriodMinutes": 60,
-    "baseShelfLifeDays": 730,
-    "q10Factor": 1.9,
     "notes": "USP Controlled Room Temperature definition: 20 to 25 °C with excursions 15-30 °C."
   },
   {
-    "id": "frozen-food",
-    "name": "Frozen Food (-18 °C or below)",
-    "emoji": "🧊",
-    "category": "Frozen Goods",
-    "tempMin": -25.0,
-    "tempMax": -18.0,
-    "setpoint": -20.0,
-    "humMin": 85.0,
-    "humMax": 95.0,
-    "warningMarginTemp": 1.0,
-    "warningMarginHum": 3.0,
-    "gracePeriodMinutes": 15,
-    "baseShelfLifeDays": 180,
-    "q10Factor": 2.0,
-    "notes": "NOTICE: Requires temperature <= -18 °C. Outside DHT11 physical measuring limits!"
-  },
-  {
     "id": "custom",
-    "name": "Custom Product (User Defined)",
-    "emoji": "🛠️",
+    "name": "Custom Product",
     "category": "Custom",
+    "hasHumidity": true,
     "tempMin": 2.0,
     "tempMax": 8.0,
     "setpoint": 5.0,
@@ -273,33 +236,27 @@ const DEFAULT_PRODUCTS_FALLBACK = [
     "warningMarginTemp": 0.5,
     "warningMarginHum": 3.0,
     "gracePeriodMinutes": 5,
-    "baseShelfLifeDays": 30,
-    "q10Factor": 2.0,
-    "notes": "User-customized storage profile. Click Edit (pencil icon) to set your required temperature and humidity bounds."
+    "notes": "User-customized storage profile."
   }
 ];
 
 class ProductManager {
   constructor() {
-    this.storageKey = "coolchain_products_v1";
+    this.storageKey = "coolchain_products_v2";
     this.activeKey = "coolchain_active_product_id";
     this.batchKey = "coolchain_batches_v1";
-    this.calibrationKey = "coolchain_calibration_offsets";
     this.guardBandKey = "coolchain_guard_band_enabled";
 
-    // Synchronous immediate initialization (no network race conditions)
     this.products = [...DEFAULT_PRODUCTS_FALLBACK];
     this.activeProductId = CONFIG.DEFAULT_PRODUCT || "vaccines";
     this.batches = [];
     this.activeBatchId = null;
-    this.calibration = { tempOffset: 0.0, humOffset: 0.0 };
     this.guardBandEnabled = true;
 
     this.init();
   }
 
   init() {
-    this.loadCalibration();
     this.loadGuardBand();
     this.loadBatches();
     this.loadProducts();
@@ -438,7 +395,7 @@ class ProductManager {
     const dht = CONFIG.DHT11;
     const warnings = [];
 
-    // 1. Outside measuring range check
+    // 1. Temperature range check
     if (p.tempMin < dht.TEMP_MIN || p.tempMax > dht.TEMP_MAX) {
       warnings.push({
         type: "OUT_OF_RANGE",
@@ -447,15 +404,18 @@ class ProductManager {
       });
     }
 
-    if (p.humMin < dht.HUM_MIN || p.humMax > dht.HUM_MAX) {
-      warnings.push({
-        type: "OUT_OF_RANGE",
-        field: "humidity",
-        message: `Requires ${p.humMin}% to ${p.humMax}% RH, which exceeds DHT11 limits (${dht.HUM_MIN}% to ${dht.HUM_MAX}% RH).`
-      });
+    // 2. Humidity range check (only if product tracks humidity)
+    if (p.hasHumidity !== false && p.humMin !== null && p.humMax !== null) {
+      if (p.humMin < dht.HUM_MIN || p.humMax > dht.HUM_MAX) {
+        warnings.push({
+          type: "OUT_OF_RANGE",
+          field: "humidity",
+          message: `Requires ${p.humMin}% to ${p.humMax}% RH, which exceeds DHT11 limits (${dht.HUM_MIN}% to ${dht.HUM_MAX}% RH).`
+        });
+      }
     }
 
-    // 2. Tolerance window narrower than 2x sensor accuracy
+    // 3. Tolerance window narrower than 2x sensor accuracy
     const tempWindow = p.tempMax - p.tempMin;
     if (tempWindow < 2 * dht.TEMP_ACCURACY) {
       warnings.push({
@@ -465,13 +425,15 @@ class ProductManager {
       });
     }
 
-    const humWindow = p.humMax - p.humMin;
-    if (humWindow < 2 * dht.HUM_ACCURACY) {
-      warnings.push({
-        type: "NARROW_TOLERANCE",
-        field: "humidity",
-        message: `Allowed humidity window (${humWindow.toFixed(1)}%) is narrower than 2× DHT11 sensor accuracy (±${dht.HUM_ACCURACY}% = 10%).`
-      });
+    if (p.hasHumidity !== false && p.humMin !== null && p.humMax !== null) {
+      const humWindow = p.humMax - p.humMin;
+      if (humWindow < 2 * dht.HUM_ACCURACY) {
+        warnings.push({
+          type: "NARROW_TOLERANCE",
+          field: "humidity",
+          message: `Allowed humidity window (${humWindow.toFixed(1)}%) is narrower than 2× DHT11 sensor accuracy (±${dht.HUM_ACCURACY}% = 10%).`
+        });
+      }
     }
 
     return {
@@ -482,7 +444,7 @@ class ProductManager {
   }
 
   // -------------------------------------------------------------
-  // Guard Band & Calibration
+  // Guard Band
   // -------------------------------------------------------------
   loadGuardBand() {
     const val = localStorage.getItem(this.guardBandKey);
@@ -493,32 +455,6 @@ class ProductManager {
     this.guardBandEnabled = !!enabled;
     localStorage.setItem(this.guardBandKey, String(this.guardBandEnabled));
     window.dispatchEvent(new CustomEvent("coolchain:settingsChanged"));
-  }
-
-  loadCalibration() {
-    const val = localStorage.getItem(this.calibrationKey);
-    if (val) {
-      try {
-        this.calibration = JSON.parse(val);
-      } catch (e) {
-        this.calibration = { tempOffset: 0.0, humOffset: 0.0 };
-      }
-    }
-  }
-
-  setCalibration(tempOffset, humOffset) {
-    this.calibration = {
-      tempOffset: parseFloat(tempOffset) || 0.0,
-      humOffset: parseFloat(humOffset) || 0.0
-    };
-    localStorage.setItem(this.calibrationKey, JSON.stringify(this.calibration));
-    window.dispatchEvent(new CustomEvent("coolchain:settingsChanged"));
-  }
-
-  applyCalibration(rawTemp, rawHum) {
-    const t = rawTemp !== null && !isNaN(rawTemp) ? rawTemp + (this.calibration.tempOffset || 0) : null;
-    const h = rawHum !== null && !isNaN(rawHum) ? rawHum + (this.calibration.humOffset || 0) : null;
-    return { temp: t, hum: h };
   }
 
   // -------------------------------------------------------------
@@ -581,4 +517,6 @@ class ProductManager {
 }
 
 // Global instance
+window.ProductManager = ProductManager;
+window.CATEGORY_SCHEMAS = CATEGORY_SCHEMAS;
 window.productManager = new ProductManager();

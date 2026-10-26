@@ -1,7 +1,7 @@
 /**
  * CoolChain Mathematical & Analytics Engine
- * Pure modular functions for statistical process control, MKT, Q10 shelf life,
- * excursions, anomalies, and DHT11 sanity checks.
+ * Pure modular functions for statistical calculations, MKT,
+ * timestamp-based moving averages, excursions, anomalies, and DHT11 sanity checks.
  * Every function includes its mathematical formula in a concise comment.
  */
 
@@ -233,11 +233,53 @@ const Analytics = {
     return result;
   },
 
+  /**
+   * Timestamp-based Moving Average (5-min, 1-hr, etc.)
+   * Evaluates all readings falling within (T - windowSeconds) to T
+   */
+  calculateTimestampMovingAverages(readings, windowSeconds = 300) {
+    if (!readings || readings.length === 0) return [];
+    const windowMs = windowSeconds * 1000;
+    const result = [];
+
+    let left = 0;
+    let sum = 0;
+    let count = 0;
+
+    for (let right = 0; right < readings.length; right++) {
+      const rightTime = new Date(readings[right].time).getTime();
+      const val = readings[right].temp;
+
+      if (val !== null && !isNaN(val)) {
+        sum += val;
+        count++;
+      }
+
+      // Evict points older than windowMs
+      while (left <= right) {
+        const leftTime = new Date(readings[left].time).getTime();
+        if (rightTime - leftTime > windowMs) {
+          const leftVal = readings[left].temp;
+          if (leftVal !== null && !isNaN(leftVal)) {
+            sum -= leftVal;
+            count--;
+          }
+          left++;
+        } else {
+          break;
+        }
+      }
+
+      result.push(count > 0 ? Math.round((sum / count) * 100) / 100 : null);
+    }
+
+    return result;
+  },
+
   // Formula: DeviationPct = ((T - Setpoint) / Setpoint) * 100
   calculateDeviation(temp, setpoint) {
     if (temp === null || isNaN(temp)) return 0;
     if (Math.abs(setpoint) < 0.01) {
-      // For near-zero setpoints (e.g. 0°C), return absolute deviation in °C
       return Math.round((temp - setpoint) * 100) / 100;
     }
     const dev = ((temp - setpoint) / setpoint) * 100.0;
@@ -249,27 +291,28 @@ const Analytics = {
   // =========================================================================
 
   /**
-   * Evaluates the single point status against product thresholds
-   * Status can be: 'SAFE', 'WARNING', 'BREACH', or 'UNCERTAIN'
+   * Evaluates point status against product thresholds.
+   * Humidity rules apply ONLY if product.hasHumidity !== false.
    */
   evaluatePointStatus(temp, hum, product, guardBandEnabled = true) {
-    if (temp === null || isNaN(temp) || hum === null || isNaN(hum)) {
+    if (temp === null || isNaN(temp)) {
       return { status: "UNKNOWN", reason: "Missing sensor telemetry" };
     }
 
-    const { tempMin, tempMax, humMin, humMax, warningMarginTemp, warningMarginHum } = product;
+    const { tempMin, tempMax, humMin, humMax, warningMarginTemp, warningMarginHum, hasHumidity } = product;
     const dht = CONFIG.DHT11;
+    const trackHum = hasHumidity !== false && humMin !== null && humMax !== null && hum !== null && !isNaN(hum);
 
     // Direct hard breach
     const tempBreach = temp < tempMin || temp > tempMax;
-    const humBreach = hum < humMin || hum > humMax;
+    const humBreach = trackHum ? (hum < humMin || hum > humMax) : false;
 
     if (tempBreach || humBreach) {
       let reasons = [];
       if (temp < tempMin) reasons.push(`Temp ${temp.toFixed(1)}°C below min limit (${tempMin}°C)`);
       if (temp > tempMax) reasons.push(`Temp ${temp.toFixed(1)}°C above max limit (${tempMax}°C)`);
-      if (hum < humMin) reasons.push(`Humidity ${hum.toFixed(1)}% below min (${humMin}%)`);
-      if (hum > humMax) reasons.push(`Humidity ${hum.toFixed(1)}% above max (${humMax}%)`);
+      if (humBreach && hum < humMin) reasons.push(`Humidity ${hum.toFixed(1)}% below min (${humMin}%)`);
+      if (humBreach && hum > humMax) reasons.push(`Humidity ${hum.toFixed(1)}% above max (${humMax}%)`);
       return { status: "BREACH", reason: reasons.join("; "), tempBreach, humBreach };
     }
 
@@ -277,13 +320,13 @@ const Analytics = {
     if (guardBandEnabled) {
       const tempNearMin = Math.abs(temp - tempMin) <= dht.TEMP_ACCURACY;
       const tempNearMax = Math.abs(temp - tempMax) <= dht.TEMP_ACCURACY;
-      const humNearMin = Math.abs(hum - humMin) <= dht.HUM_ACCURACY;
-      const humNearMax = Math.abs(hum - humMax) <= dht.HUM_ACCURACY;
+      const humNearMin = trackHum ? Math.abs(hum - humMin) <= dht.HUM_ACCURACY : false;
+      const humNearMax = trackHum ? Math.abs(hum - humMax) <= dht.HUM_ACCURACY : false;
 
       if (tempNearMin || tempNearMax || humNearMin || humNearMax) {
         return {
           status: "UNCERTAIN",
-          reason: `Reading is within DHT11 tolerance window (±${dht.TEMP_ACCURACY}°C / ±${dht.HUM_ACCURACY}% RH) of safe limits. Compliance is statistically uncertain.`,
+          reason: `Reading is within DHT11 tolerance window (±${dht.TEMP_ACCURACY}°C) of safe limits. Statistically uncertain.`,
           isGuardBand: true
         };
       }
@@ -294,12 +337,12 @@ const Analytics = {
     const marginH = warningMarginHum || 3.0;
 
     const tempWarning = (temp <= tempMin + marginT) || (temp >= tempMax - marginT);
-    const humWarning = (hum <= humMin + marginH) || (hum >= humMax - marginH);
+    const humWarning = trackHum ? ((hum <= humMin + marginH) || (hum >= humMax - marginH)) : false;
 
     if (tempWarning || humWarning) {
       return {
         status: "WARNING",
-        reason: `Approaching threshold limits within pre-alert margin (±${marginT}°C / ±${marginH}% RH).`,
+        reason: `Approaching threshold limits within pre-alert margin (±${marginT}°C).`,
         tempWarning, humWarning
       };
     }
@@ -331,8 +374,9 @@ const Analytics = {
       };
     }
 
-    const { tempMin, tempMax, humMin, humMax, gracePeriodMinutes } = product;
+    const { tempMin, tempMax, humMin, humMax, gracePeriodMinutes, hasHumidity } = product;
     const graceMs = (gracePeriodMinutes || 0) * 60000;
+    const trackHum = hasHumidity !== false && humMin !== null && humMax !== null;
 
     const excursions = [];
     let currentExcursion = null;
@@ -348,10 +392,10 @@ const Analytics = {
       const dtMs = nextR ? Math.min(new Date(nextR.time) - new Date(r.time), 120000) : 30000;
       totalMonitoredMs += dtMs;
 
-      const isHigh = r.temp > tempMax;
-      const isLow = r.temp < tempMin;
-      const isHumHigh = r.hum > humMax;
-      const isHumLow = r.hum < humMin;
+      const isHigh = r.temp !== null && r.temp > tempMax;
+      const isLow = r.temp !== null && r.temp < tempMin;
+      const isHumHigh = trackHum && r.hum !== null && r.hum > humMax;
+      const isHumLow = trackHum && r.hum !== null && r.hum < humMin;
       const isBreach = isHigh || isLow || isHumHigh || isHumLow;
 
       if (isHigh || isHumHigh) timeAboveMs += dtMs;
@@ -398,7 +442,6 @@ const Analytics = {
       excursions.push(currentExcursion);
     }
 
-    // Longest excursion and daily histogram
     let longest = null;
     const perDay = {};
     for (const exc of excursions) {
@@ -427,15 +470,14 @@ const Analytics = {
     exc.durationMinutes = durationMin;
     exc.gracePeriodExceeded = exc.durationMs > graceMs;
 
-    // Severity assessment: Minor, Major, Critical
     const { tempMin, tempMax, humMin, humMax } = product;
     let dist = 0;
     if (exc.parameter === "Temperature") {
       if (exc.direction === "HIGH") dist = exc.peakValue - tempMax;
       else dist = tempMin - exc.peakValue;
     } else {
-      if (exc.direction === "HIGH") dist = exc.peakValue - humMax;
-      else dist = humMin - exc.peakValue;
+      if (exc.direction === "HIGH") dist = exc.peakValue - (humMax || 100);
+      else dist = (humMin || 0) - exc.peakValue;
     }
 
     if (!exc.gracePeriodExceeded) {
@@ -446,19 +488,17 @@ const Analytics = {
       exc.severityNote = "Severe threshold distance or prolonged duration (possible integrity loss).";
     } else {
       exc.severity = "Major";
-      exc.severityNote = "Grace period exceeded; cumulative shelf-life impact likely.";
+      exc.severityNote = "Grace period exceeded; active intervention recommended.";
     }
   },
 
   // Formula: ComplianceScore = 100 * (timeInRange / total) - penalty(excursions, grace violations) + completeness bonus
   calculateComplianceScore(timeInRangePct, excursions, dataCompletenessPct) {
     if (isNaN(timeInRangePct)) return 100;
-    let score = timeInRangePct * 0.70; // 70% weight on time in range
+    let score = timeInRangePct * 0.70;
 
-    // Completeness adds up to 30%
     score += (dataCompletenessPct || 100) * 0.30;
 
-    // Penalties
     let minorCount = 0, majorCount = 0, criticalCount = 0, graceViolations = 0;
     for (const e of excursions || []) {
       if (e.severity === "Minor") minorCount++;
@@ -472,127 +512,22 @@ const Analytics = {
   },
 
   // =========================================================================
-  // 8. Q10 FRESHNESS & SHELF LIFE MODEL
+  // 8. ANOMALY DETECTION (Z-SCORE, IQR, FLATLINE, DOOR-OPEN)
   // =========================================================================
 
-  // Formula: AgingRate(T) = Q10^((T - Tref) / 10)
-  // ConsumedDays = sum( AgingRate(T_i) * deltaDays_i )
-  calculateShelfLife(readings, product) {
-    const baseDays = product.baseShelfLifeDays || 30;
-    const q10 = product.q10Factor || 2.0;
-    const tRef = product.setpoint !== undefined ? product.setpoint : ((product.tempMin + product.tempMax) / 2);
-
-    if (!readings || readings.length === 0) {
-      return {
-        shelfLifeUsedDays: 0,
-        shelfLifeUsedPct: 0,
-        remainingDays: baseDays,
-        freshnessStatus: "Fresh",
-        extraDaysLostExcursions: 0,
-        cumulativeCurve: []
-      };
-    }
-
-    let consumedDays = 0;
-    let idealDays = 0;
-    const cumulativeCurve = [];
-
-    for (let i = 0; i < readings.length; i++) {
-      const r = readings[i];
-      const nextR = readings[i + 1];
-      const dtSec = nextR ? Math.min((new Date(nextR.time) - new Date(r.time)) / 1000, 120) : 30;
-      const deltaDays = dtSec / 86400.0;
-
-      // Q10 formulation
-      const tempDiff = (r.temp !== null && !isNaN(r.temp)) ? r.temp - tRef : 0;
-      const rate = Math.pow(q10, tempDiff / 10.0);
-
-      consumedDays += rate * deltaDays;
-      idealDays += 1.0 * deltaDays; // aging rate at exactly tRef is 1.0
-
-      if (i % 5 === 0 || i === readings.length - 1) {
-        cumulativeCurve.push({
-          time: r.time,
-          consumedDays: Math.round(consumedDays * 1000) / 1000,
-          idealDays: Math.round(idealDays * 1000) / 1000,
-          agingRate: Math.round(rate * 100) / 100
-        });
-      }
-    }
-
-    const remainingDays = Math.max(0, baseDays - consumedDays);
-    const usedPct = Math.min(100, (consumedDays / baseDays) * 100);
-    const extraLost = Math.max(0, consumedDays - idealDays);
-
-    let status = "Fresh";
-    const remainPct = 100 - usedPct;
-    if (remainPct >= 80) status = "Fresh";
-    else if (remainPct >= 50) status = "Good";
-    else if (remainPct >= 20) status = "Use soon";
-    else status = "At risk";
-
-    return {
-      shelfLifeUsedDays: Math.round(consumedDays * 100) / 100,
-      shelfLifeUsedPct: Math.round(usedPct * 10) / 10,
-      remainingDays: Math.round(remainingDays * 10) / 10,
-      freshnessStatus: status,
-      extraDaysLostExcursions: Math.round(extraLost * 100) / 100,
-      cumulativeCurve
-    };
-  },
-
-  // =========================================================================
-  // 9. STATISTICAL PROCESS CONTROL (SPC) & CONTROL CHARTS
-  // =========================================================================
-
-  // Formula: CenterLine = Mean, UCL/LCL = Mean +/- k * Sigma (k = 1, 2, 3)
-  calculateSPC(values) {
-    if (!values || values.length < 2) {
-      return { mean: 0, sigma: 0, ucl1: 0, lcl1: 0, ucl2: 0, lcl2: 0, ucl3: 0, lcl3: 0, outOfControlPoints: [] };
-    }
-    const m = this.mean(values);
-    const s = this.stdDev(values, m);
-
-    const outOfControl = [];
-    for (let i = 0; i < values.length; i++) {
-      if (Math.abs(values[i] - m) > 3 * s) {
-        outOfControl.push({ index: i, value: values[i], devSigma: (values[i] - m) / (s || 1) });
-      }
-    }
-
-    return {
-      mean: Math.round(m * 100) / 100,
-      sigma: Math.round(s * 100) / 100,
-      ucl1: Math.round((m + s) * 100) / 100,
-      lcl1: Math.round((m - s) * 100) / 100,
-      ucl2: Math.round((m + 2 * s) * 100) / 100,
-      lcl2: Math.round((m - 2 * s) * 100) / 100,
-      ucl3: Math.round((m + 3 * s) * 100) / 100,
-      lcl3: Math.round((m - 3 * s) * 100) / 100,
-      outOfControlPoints: outOfControl
-    };
-  },
-
-  // =========================================================================
-  // 10. ANOMALY DETECTION (Z-SCORE, IQR, FLATLINE, DOOR-OPEN)
-  // =========================================================================
-
-  /**
-   * Detects sensor anomalies accounting for DHT11 1°C step resolution
-   */
   detectAnomalies(readings, zSensitivity = 3.0) {
     if (!readings || readings.length < 5) return [];
     const anomalies = [];
-    const temps = readings.map(r => r.temp);
+    const temps = readings.map(r => r.temp).filter(v => v !== null && !isNaN(v));
     const m = this.mean(temps);
     const s = this.stdDev(temps, m);
     const p25 = this.percentile(temps, 25);
     const p75 = this.percentile(temps, 75);
     const iqr = p75 - p25;
 
-    // 1. Z-Score and IQR outliers
     for (let i = 0; i < readings.length; i++) {
       const r = readings[i];
+      if (r.temp === null || isNaN(r.temp)) continue;
       const z = s > 0 ? (r.temp - m) / s : 0;
 
       if (Math.abs(z) > zSensitivity) {
@@ -616,10 +551,10 @@ const Analytics = {
       }
     }
 
-    // 2. Sudden Spike / Drop (> 3.5°C jump within 30s)
     for (let i = 1; i < readings.length; i++) {
       const prev = readings[i - 1];
       const curr = readings[i];
+      if (prev.temp === null || curr.temp === null) continue;
       const dtMin = (new Date(curr.time) - new Date(prev.time)) / 60000;
       if (dtMin > 0 && dtMin <= 2) {
         const deltaT = Math.abs(curr.temp - prev.temp);
@@ -635,7 +570,6 @@ const Analytics = {
       }
     }
 
-    // 3. Flatline Detection (>= 60 minutes of constant temperature)
     let flatlineStart = 0;
     for (let i = 1; i < readings.length; i++) {
       if (readings[i].temp !== readings[flatlineStart].temp) {
@@ -646,22 +580,22 @@ const Analytics = {
             time: readings[flatlineStart].time,
             value: readings[flatlineStart].temp,
             severity: "Medium",
-            message: `Temperature flatlined at exactly ${readings[flatlineStart].temp}°C for ${Math.round(durationMin)} minutes (sensor may be frozen or uncoupled).`
+            message: `Temperature flatlined at exactly ${readings[flatlineStart].temp}°C for ${Math.round(durationMin)} minutes.`
           });
         }
         flatlineStart = i;
       }
     }
 
-    // 4. Door-Open Heuristic: Rapid rise (> 1.5°C in < 3 min) followed by recovery within 15 min
     for (let i = 1; i < readings.length - 2; i++) {
       const r0 = readings[i - 1];
       const r1 = readings[i];
+      if (r0.temp === null || r1.temp === null) continue;
       const dt1 = (new Date(r1.time) - new Date(r0.time)) / 60000;
       if (dt1 > 0 && dt1 <= 3 && (r1.temp - r0.temp) >= 1.5) {
-        // Look ahead for recovery
         for (let j = i + 1; j < Math.min(readings.length, i + 15); j++) {
           const rj = readings[j];
+          if (rj.temp === null) continue;
           const totalDt = (new Date(rj.time) - new Date(r0.time)) / 60000;
           if (totalDt <= 20 && Math.abs(rj.temp - r0.temp) <= 0.8) {
             anomalies.push({
@@ -671,7 +605,7 @@ const Analytics = {
               severity: "Info",
               message: `Possible refrigerator door-opening detected (rise of +${(r1.temp - r0.temp).toFixed(1)}°C recovered within ${Math.round(totalDt)} min).`
             });
-            i = j; // skip forward
+            i = j;
             break;
           }
         }
@@ -682,12 +616,9 @@ const Analytics = {
   },
 
   // =========================================================================
-  // 11. REGRESSION & PROJECTION
+  // 9. REGRESSION & PROJECTION
   // =========================================================================
 
-  // Formula: Slope m = (n*sum(xy) - sum(x)*sum(y)) / (n*sum(x^2) - (sum(x))^2)
-  // Intercept b = (sum(y) - m*sum(x)) / n
-  // Pearson r = (n*sum(xy) - sum(x)*sum(y)) / sqrt([n*sum(x^2) - (sum(x))^2] * [n*sum(y^2) - (sum(y))^2])
   calculateLinearRegression(xArray, yArray) {
     const n = Math.min(xArray.length, yArray.length);
     if (n < 2) return { slope: 0, intercept: 0, r: 0, r2: 0 };
@@ -720,23 +651,18 @@ const Analytics = {
     };
   },
 
-  /**
-   * Projects temperature for the next 1-3 hours and calculates time to breach
-   */
   projectTrend(recentReadings, product) {
     if (!recentReadings || recentReadings.length < 5) return null;
-    const n = Math.min(recentReadings.length, 30); // use last 15-30 readings (~10-15 mins)
+    const n = Math.min(recentReadings.length, 30);
     const slice = recentReadings.slice(-n);
-    const t0 = new Date(slice[0].time).getTime() / 60000; // minutes
+    const t0 = new Date(slice[0].time).getTime() / 60000;
     const xs = slice.map(r => (new Date(r.time).getTime() / 60000) - t0);
     const ys = slice.map(r => r.temp);
 
     const reg = this.calculateLinearRegression(xs, ys);
     const currentTemp = ys[ys.length - 1];
-    const slopePerMin = reg.slope; // °C per minute
+    const slopePerMin = reg.slope;
 
-    // Project at 60 min, 120 min, 180 min
-    const lastX = xs[xs.length - 1];
     const proj60 = currentTemp + slopePerMin * 60;
     const proj120 = currentTemp + slopePerMin * 120;
     const proj180 = currentTemp + slopePerMin * 180;
@@ -768,7 +694,7 @@ const Analytics = {
   },
 
   // =========================================================================
-  // 12. DEVICE & DATA HEALTH
+  // 10. DEVICE & DATA HEALTH
   // =========================================================================
 
   calculateDataHealth(readings, expectedIntervalSec = 30) {
@@ -779,7 +705,7 @@ const Analytics = {
         gapsCount: 0,
         gapsList: [],
         avgIntervalSec: 0,
-        isOffline: true,
+        isOffline: false,
         lastSeenTime: null,
         sensorHealthScore: 0,
         sensorSanityWarnings: ["No data received"]
@@ -812,24 +738,22 @@ const Analytics = {
 
     const avgInterval = intervalCount > 0 ? Math.round((intervalSum / intervalCount) * 10) / 10 : expectedIntervalSec;
 
-    // Offline check: now vs last reading
     const nowMs = Date.now();
     const lastReadingAgeSec = (nowMs - lastTime) / 1000;
-    // In demo mode or historical view, don't flag offline if viewing old data unless configured
-    const isOffline = lastReadingAgeSec > (expectedIntervalSec * CONFIG.OFFLINE_THRESHOLD_MULTIPLIER);
+    // Do not falsely flag offline if viewing historical data
+    const isOffline = !isDemoMode() && lastReadingAgeSec > (expectedIntervalSec * CONFIG.OFFLINE_THRESHOLD_MULTIPLIER);
 
-    // DHT11 Sanity Checks
     const dht = CONFIG.DHT11;
     const sanityWarnings = [];
     let sanityScore = 100;
 
     for (const r of readings) {
-      if (r.temp < dht.TEMP_MIN || r.temp > dht.TEMP_MAX) {
+      if (r.temp !== null && (r.temp < dht.TEMP_MIN || r.temp > dht.TEMP_MAX)) {
         sanityWarnings.push(`Reading ${r.temp}°C outside physical DHT11 boundaries (${dht.TEMP_MIN} to ${dht.TEMP_MAX}°C)`);
         sanityScore -= 10;
         break;
       }
-      if (r.hum < dht.HUM_MIN || r.hum > dht.HUM_MAX) {
+      if (r.hum !== null && (r.hum < dht.HUM_MIN || r.hum > dht.HUM_MAX)) {
         sanityWarnings.push(`Humidity ${r.hum}% outside DHT11 boundaries (${dht.HUM_MIN} to ${dht.HUM_MAX}%)`);
         sanityScore -= 10;
         break;
@@ -855,7 +779,7 @@ const Analytics = {
   },
 
   // =========================================================================
-  // 13. AUTOMATED SELF-TEST SUITE
+  // 11. AUTOMATED SELF-TEST SUITE
   // =========================================================================
 
   runSelfTest() {
@@ -865,20 +789,14 @@ const Analytics = {
       results.push({ testName, actual, expected, pass });
     };
 
-    // 1. Mean & StdDev test on fixture [2, 4, 4, 4, 5, 5, 7, 9]
-    // Mean = 5.0, Variance = 4.571, StdDev = 2.138
     const fixture1 = [2, 4, 4, 4, 5, 5, 7, 9];
     assert("Descriptive: Mean", this.mean(fixture1), 5.0);
     assert("Descriptive: Median", this.median(fixture1), 4.5);
     assert("Descriptive: StdDev", this.stdDev(fixture1), 2.14, 0.05);
 
-    // 2. MKT calculation test
-    // 5 constant temperatures at 5.0 °C should produce MKT = 5.0 °C exactly
     const constantTemps = [5.0, 5.0, 5.0, 5.0, 5.0];
     assert("MKT: Constant Temperature", this.calculateMKT(constantTemps), 5.0, 0.01);
 
-    // MKT on fluctuating temps [2.0, 8.0, 5.0, 10.0, 4.0]
-    // Due to exponential weighting, MKT must be > arithmetic mean (5.8 °C)
     const fluctuatingTemps = [2.0, 8.0, 5.0, 10.0, 4.0];
     const meanFluc = this.mean(fluctuatingTemps);
     const mktFluc = this.calculateMKT(fluctuatingTemps);
@@ -889,35 +807,24 @@ const Analytics = {
       pass: mktFluc > meanFluc
     });
 
-    // 3. Excursion detection with grace period test
     const dummyProduct = {
       tempMin: 2.0, tempMax: 8.0, humMin: 30, humMax: 60,
-      gracePeriodMinutes: 5, setpoint: 5.0
+      gracePeriodMinutes: 5, setpoint: 5.0, hasHumidity: true
     };
     const now = new Date("2026-10-26T12:00:00Z");
     const readingsMock = [
       { time: new Date(now.getTime() + 0 * 30000).toISOString(), temp: 5.0, hum: 45 },
-      { time: new Date(now.getTime() + 1 * 30000).toISOString(), temp: 9.5, hum: 45 }, // breach start
+      { time: new Date(now.getTime() + 1 * 30000).toISOString(), temp: 9.5, hum: 45 },
       { time: new Date(now.getTime() + 2 * 30000).toISOString(), temp: 9.8, hum: 45 },
-      { time: new Date(now.getTime() + 3 * 30000).toISOString(), temp: 9.2, hum: 45 }, // 1.5 min total breach (grace = 5 min)
-      { time: new Date(now.getTime() + 4 * 30000).toISOString(), temp: 5.0, hum: 45 }, // recovered
+      { time: new Date(now.getTime() + 3 * 30000).toISOString(), temp: 9.2, hum: 45 },
+      { time: new Date(now.getTime() + 4 * 30000).toISOString(), temp: 5.0, hum: 45 },
     ];
     const excResult = this.detectExcursions(readingsMock, dummyProduct);
     assert("Excursion Detection: Excursion Count", excResult.totalExcursions, 1, 0);
     assert("Excursion Grace Period: Not Exceeded", excResult.excursions[0]?.gracePeriodExceeded ? 1 : 0, 0, 0);
 
-    // 4. Q10 shelf life test
-    // If temp = setpoint exactly for 1 day, shelf life consumed should be 1.0 day
-    const oneDayMock = [];
-    for (let k = 0; k < 2880; k++) { // 2880 * 30s = 86400s = 1 day
-      oneDayMock.push({
-        time: new Date(now.getTime() + k * 30000).toISOString(),
-        temp: 5.0,
-        hum: 45
-      });
-    }
-    const shelfTest = this.calculateShelfLife(oneDayMock, dummyProduct);
-    assert("Q10 Shelf Life: Exact 1-Day at Setpoint", shelfTest.shelfLifeUsedDays, 1.0, 0.05);
+    const maTest = this.calculateTimestampMovingAverages(readingsMock, 60);
+    assert("Moving Average: Timestamp Window Calculation", maTest[1], 7.25, 0.05);
 
     return results;
   }

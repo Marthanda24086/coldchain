@@ -150,6 +150,17 @@ body {
   transition: all 0.15s ease;
 }
 
+.nav-icon {
+  width: 1.15rem;
+  height: 1.15rem;
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+
+.hidden {
+  display: none !important;
+}
+
 .nav-link:hover {
   background-color: rgba(255, 255, 255, 0.08);
   color: #ffffff;
@@ -905,4 +916,35 @@ tr:hover td {
 
 .print-only {
   display: none;
+}
+
+/* Live Stream Badge & Animated Pulse */
+.live-stream-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 0.25rem 0.6rem;
+  border-radius: 9999px;
+  background: rgba(0, 158, 115, 0.15);
+  color: var(--accent-teal);
+  border: 1px solid rgba(0, 158, 115, 0.35);
+  text-transform: uppercase;
+}
+
+.pulse-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background-color: var(--accent-teal);
+  box-shadow: 0 0 6px var(--accent-teal);
+  animation: liveMovingPulse 1.4s ease-in-out infinite;
+}
+
+@keyframes liveMovingPulse {
+  0% { transform: scale(0.85); opacity: 0.6; }
+  50% { transform: scale(1.35); opacity: 1; }
+  100% { transform: scale(0.85); opacity: 0.6; }
 }

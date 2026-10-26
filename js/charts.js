@@ -1,8 +1,8 @@
 /**
  * CoolChain Chart Engine
  * Resilient Chart.js visualizations for cold chain telemetry:
- * Live dual-axis trend, sparklines, SPC charts, histograms,
- * scatter plots, diurnal heatmaps, and shelf-life degradation curves.
+ * Live dual-axis trend, sparklines, histograms, scatter plots,
+ * diurnal heatmaps, and timestamp-based moving averages.
  * Uses native string timestamps to guarantee 100% reliability with zero adapter failures.
  */
 
@@ -63,6 +63,7 @@ const Charts = (() => {
         const xRight = chart.chartArea.right;
         ctx.save();
         for (const line of lines) {
+          if (line.value === null || line.value === undefined || isNaN(line.value)) continue;
           const yPx = yAxis.getPixelForValue(line.value);
           if (yPx < chart.chartArea.top || yPx > chart.chartArea.bottom) continue;
           ctx.beginPath();
@@ -101,12 +102,10 @@ const Charts = (() => {
         const yWarnMinOuter = yAxis.getPixelForValue(minVal);
         const yWarnMaxOuter = yAxis.getPixelForValue(maxVal);
 
-        // Warning bands
         ctx.fillStyle = warnColor;
         ctx.fillRect(left, Math.min(yWarnMaxOuter, top), right - left, Math.abs(yMax - yWarnMaxOuter));
         ctx.fillRect(left, Math.max(yMin, top), right - left, Math.abs(yWarnMinOuter - yMin));
 
-        // Safe band
         ctx.fillStyle = color;
         const safeTop = Math.max(Math.min(yMax, bottom), top);
         const safeBot = Math.min(Math.max(yMin, top), bottom);
@@ -118,12 +117,14 @@ const Charts = (() => {
   }
 
   // -------------------------------------------------------------------------
-  // 1. LIVE DUAL-AXIS CHART
+  // 1. LIVE MOVING DUAL-AXIS CHART
   // -------------------------------------------------------------------------
   function buildLiveChart(canvasId, readings, product) {
-    destroyChart("live");
     const ctx = getCtx(canvasId);
-    if (!ctx || !readings || readings.length === 0) return;
+    if (!ctx || !readings || readings.length === 0) {
+      destroyChart("live");
+      return;
+    }
 
     try {
       const isLong = readings.length > 100 && (new Date(readings[readings.length - 1].time) - new Date(readings[0].time)) > 86400000;
@@ -131,6 +132,7 @@ const Charts = (() => {
       const temps = readings.map(r => r.temp);
       const hums = readings.map(r => r.hum);
       const rollingTemps = Analytics.calculateRollingAverages(temps, 12);
+      const trackHum = product.hasHumidity !== false && product.humMin !== null && product.humMax !== null;
 
       const breachColors = readings.map(r => {
         const st = Analytics.evaluatePointStatus(r.temp, r.hum, product, window.productManager?.guardBandEnabled);
@@ -138,6 +140,34 @@ const Charts = (() => {
         if (st.status === "WARNING" || st.status === "UNCERTAIN") return PALETTE.warning;
         return PALETTE.temperature;
       });
+
+      // Highlight the newest live point with a larger glowing radius
+      const pointRadii = temps.map((_, idx) => (idx === temps.length - 1 ? 6 : (readings.length > 120 ? 1 : 3)));
+      const pointHoverRadii = temps.map((_, idx) => (idx === temps.length - 1 ? 8 : 5));
+
+      const existingChart = registry["live"];
+      const currentTrackHum = existingChart ? existingChart._trackHum : null;
+      const currentProductId = existingChart ? existingChart._productId : null;
+
+      // If chart exists and same structure, update smoothly in place (moving streaming effect)
+      if (existingChart && currentTrackHum === trackHum && currentProductId === product.id) {
+        existingChart.data.labels = labels;
+        existingChart.data.datasets[0].data = temps;
+        existingChart.data.datasets[0].pointBackgroundColor = breachColors;
+        existingChart.data.datasets[0].pointRadius = pointRadii;
+        existingChart.data.datasets[0].pointHoverRadius = pointHoverRadii;
+        existingChart.data.datasets[1].data = rollingTemps;
+
+        if (trackHum && existingChart.data.datasets[2]) {
+          existingChart.data.datasets[2].data = hums;
+        }
+
+        existingChart.update();
+        return;
+      }
+
+      // Recreate if not existing or product profile structure changed
+      destroyChart("live");
 
       const thresholdPlugin = makeThresholdPlugin([
         { value: product.tempMax, color: PALETTE.breach, label: `Max ${product.tempMax}°C`, dash: [8, 4] },
@@ -150,74 +180,87 @@ const Charts = (() => {
         product.warningMarginTemp || 0.5
       );
 
-      registry["live"] = new Chart(ctx, {
+      const datasets = [
+        {
+          label: "Temperature (°C)",
+          data: temps,
+          borderColor: PALETTE.temperature,
+          backgroundColor: "rgba(230,159,0,0.06)",
+          fill: true,
+          pointBackgroundColor: breachColors,
+          pointRadius: pointRadii,
+          pointHoverRadius: pointHoverRadii,
+          borderWidth: 2,
+          tension: 0.25,
+          yAxisID: "y"
+        },
+        {
+          label: "Rolling Avg (°C)",
+          data: rollingTemps,
+          borderColor: PALETTE.rolling,
+          backgroundColor: "transparent",
+          pointRadius: 0,
+          borderWidth: 1.5,
+          borderDash: [5, 3],
+          tension: 0.3,
+          yAxisID: "y"
+        }
+      ];
+
+      const scales = {
+        x: {
+          grid: { color: "rgba(128,128,128,0.1)" },
+          ticks: { maxTicksLimit: 10, color: "#888" }
+        },
+        y: {
+          title: { display: true, text: "Temperature (°C)", color: PALETTE.temperature },
+          grid: { color: "rgba(128,128,128,0.1)" },
+          ticks: { color: PALETTE.temperature }
+        }
+      };
+
+      if (trackHum) {
+        datasets.push({
+          label: "Humidity (%RH)",
+          data: hums,
+          borderColor: PALETTE.humidity,
+          backgroundColor: "transparent",
+          pointRadius: 0,
+          borderWidth: 1.5,
+          tension: 0.2,
+          yAxisID: "y2"
+        });
+        scales.y2 = {
+          position: "right",
+          title: { display: true, text: "Humidity (%RH)", color: PALETTE.humidity },
+          grid: { drawOnChartArea: false },
+          ticks: { color: PALETTE.humidity },
+          min: 0, max: 100
+        };
+      }
+
+      const chart = new Chart(ctx, {
         type: "line",
         plugins: [thresholdPlugin, safeBandPlugin],
-        data: {
-          labels,
-          datasets: [
-            {
-              label: "Temperature (°C)",
-              data: temps,
-              borderColor: PALETTE.temperature,
-              backgroundColor: "transparent",
-              pointBackgroundColor: breachColors,
-              pointRadius: readings.length > 120 ? 1 : 3,
-              borderWidth: 2,
-              tension: 0.2,
-              yAxisID: "y"
-            },
-            {
-              label: "Rolling Avg (°C)",
-              data: rollingTemps,
-              borderColor: PALETTE.rolling,
-              backgroundColor: "transparent",
-              pointRadius: 0,
-              borderWidth: 1.5,
-              borderDash: [5, 3],
-              tension: 0.3,
-              yAxisID: "y"
-            },
-            {
-              label: "Humidity (%RH)",
-              data: hums,
-              borderColor: PALETTE.humidity,
-              backgroundColor: "transparent",
-              pointRadius: 0,
-              borderWidth: 1.5,
-              tension: 0.2,
-              yAxisID: "y2"
-            }
-          ]
-        },
+        data: { labels, datasets },
         options: {
           responsive: true,
           maintainAspectRatio: false,
-          animation: false,
-          interaction: { mode: "index", intersect: false },
-          scales: {
-            x: {
-              grid: { color: "rgba(128,128,128,0.1)" },
-              ticks: { maxTicksLimit: 8, color: "#888" }
-            },
-            y: {
-              title: { display: true, text: "Temperature (°C)", color: PALETTE.temperature },
-              grid: { color: "rgba(128,128,128,0.1)" },
-              ticks: { color: PALETTE.temperature }
-            },
-            y2: {
-              position: "right",
-              title: { display: true, text: "Humidity (%RH)", color: PALETTE.humidity },
-              grid: { drawOnChartArea: false },
-              ticks: { color: PALETTE.humidity },
-              min: 0, max: 100
-            }
+          animation: {
+            duration: 450,
+            easing: "easeOutQuad"
           },
+          interaction: { mode: "index", intersect: false },
+          scales,
           plugins: {
             legend: { position: "top", labels: { usePointStyle: true } }
           }
         }
       });
+
+      chart._trackHum = trackHum;
+      chart._productId = product.id;
+      registry["live"] = chart;
     } catch (err) {
       console.error("Live chart render error:", err);
     }
@@ -259,69 +302,7 @@ const Charts = (() => {
   }
 
   // -------------------------------------------------------------------------
-  // 3. SPC CONTROL CHART
-  // -------------------------------------------------------------------------
-  function buildSPCChart(canvasId, readings, product) {
-    destroyChart("spc");
-    const ctx = getCtx(canvasId);
-    if (!ctx || !readings || readings.length < 5) return;
-
-    try {
-      const isLong = readings.length > 100;
-      const labels = readings.map(r => formatTime(r.time, isLong));
-      const temps = readings.map(r => r.temp);
-      const spc = Analytics.calculateSPC(temps);
-
-      const pointColors = temps.map(v =>
-        Math.abs(v - spc.mean) > 3 * spc.sigma ? PALETTE.breach :
-        Math.abs(v - spc.mean) > 2 * spc.sigma ? "#CC7700" :
-        PALETTE.temperature
-      );
-
-      const spcPlugin = makeThresholdPlugin([
-        { value: spc.ucl3, color: PALETTE.breach, label: "+3σ", dash: [5, 3] },
-        { value: spc.lcl3, color: PALETTE.breach, label: "-3σ", dash: [5, 3] },
-        { value: spc.ucl2, color: "#CC7700", label: "+2σ", dash: [4, 4] },
-        { value: spc.lcl2, color: "#CC7700", label: "-2σ", dash: [4, 4] },
-        { value: spc.ucl1, color: "#999", label: "+1σ", dash: [3, 5] },
-        { value: spc.lcl1, color: "#999", label: "-1σ", dash: [3, 5] },
-        { value: spc.mean, color: "#0072B2", label: "Mean", dash: [8, 3], width: 2 }
-      ]);
-
-      registry["spc"] = new Chart(ctx, {
-        type: "line",
-        plugins: [spcPlugin],
-        data: {
-          labels,
-          datasets: [{
-            label: "Temperature (°C)",
-            data: temps,
-            borderColor: PALETTE.temperature,
-            backgroundColor: "transparent",
-            pointBackgroundColor: pointColors,
-            pointRadius: readings.length > 120 ? 1.5 : 3,
-            borderWidth: 1.5,
-            tension: 0.1
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          animation: false,
-          scales: {
-            x: { ticks: { maxTicksLimit: 8, color: "#888" }, grid: { color: "rgba(128,128,128,0.1)" } },
-            y: { title: { display: true, text: "Temperature (°C)" }, grid: { color: "rgba(128,128,128,0.1)" } }
-          },
-          plugins: { legend: { display: false } }
-        }
-      });
-    } catch (err) {
-      console.error("SPC chart render error:", err);
-    }
-  }
-
-  // -------------------------------------------------------------------------
-  // 4. HISTOGRAMS
+  // 3. HISTOGRAMS
   // -------------------------------------------------------------------------
   function buildHistogram(canvasId, values, label, color, limitMin, limitMax, binCount = 15) {
     destroyChart(canvasId);
@@ -341,7 +322,9 @@ const Charts = (() => {
       for (const v of values) {
         const bi = Math.min(Math.floor((v - min) / binWidth), binCount - 1);
         bins[bi].count++;
-        if (v < limitMin || v > limitMax) bins[bi].isBreach = true;
+        if (limitMin !== null && limitMax !== null) {
+          if (v < limitMin || v > limitMax) bins[bi].isBreach = true;
+        }
       }
 
       const colors = bins.map(b => b.isBreach ? PALETTE.breach : color);
@@ -373,7 +356,7 @@ const Charts = (() => {
   }
 
   // -------------------------------------------------------------------------
-  // 5. TEMPERATURE vs HUMIDITY SCATTER PLOT
+  // 4. TEMPERATURE vs HUMIDITY SCATTER PLOT
   // -------------------------------------------------------------------------
   function buildScatterChart(canvasId, readings) {
     destroyChart("scatter");
@@ -381,9 +364,12 @@ const Charts = (() => {
     if (!ctx || !readings || readings.length < 3) return null;
 
     try {
-      const points = readings.map(r => ({ x: r.temp, y: r.hum }));
-      const xs = readings.map(r => r.temp);
-      const ys = readings.map(r => r.hum);
+      const valid = readings.filter(r => r.temp !== null && r.hum !== null && !isNaN(r.temp) && !isNaN(r.hum));
+      if (valid.length < 3) return null;
+
+      const points = valid.map(r => ({ x: r.temp, y: r.hum }));
+      const xs = valid.map(r => r.temp);
+      const ys = valid.map(r => r.hum);
       const reg = Analytics.calculateLinearRegression(xs, ys);
       const xMin = Math.min(...xs), xMax = Math.max(...xs);
       const regLine = [
@@ -433,7 +419,7 @@ const Charts = (() => {
   }
 
   // -------------------------------------------------------------------------
-  // 6. COMPLIANCE DONUT CHART
+  // 5. COMPLIANCE DONUT CHART
   // -------------------------------------------------------------------------
   function buildComplianceDonut(canvasId, inRangePct, abovePct, belowPct) {
     destroyChart("complianceDonut");
@@ -468,98 +454,7 @@ const Charts = (() => {
   }
 
   // -------------------------------------------------------------------------
-  // 7. EXCURSIONS PER DAY BAR CHART
-  // -------------------------------------------------------------------------
-  function buildExcursionsPerDayChart(canvasId, excursionsPerDay) {
-    destroyChart("excursionsPerDay");
-    const ctx = getCtx(canvasId);
-    if (!ctx || !excursionsPerDay) return;
-
-    try {
-      const keys = Object.keys(excursionsPerDay).sort();
-      registry["excursionsPerDay"] = new Chart(ctx, {
-        type: "bar",
-        data: {
-          labels: keys,
-          datasets: [{
-            label: "Excursion Events",
-            data: keys.map(k => excursionsPerDay[k]),
-            backgroundColor: PALETTE.breach,
-            borderRadius: 4
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          animation: false,
-          plugins: { legend: { display: false } },
-          scales: {
-            x: { ticks: { maxTicksLimit: 12 } },
-            y: { beginAtZero: true, title: { display: true, text: "Count" }, ticks: { stepSize: 1 } }
-          }
-        }
-      });
-    } catch (err) {
-      console.error("Excursions per day chart error:", err);
-    }
-  }
-
-  // -------------------------------------------------------------------------
-  // 8. Q10 SHELF LIFE CUMULATIVE CURVE
-  // -------------------------------------------------------------------------
-  function buildShelfLifeChart(canvasId, cumulativeCurve) {
-    destroyChart("shelfLife");
-    const ctx = getCtx(canvasId);
-    if (!ctx || !cumulativeCurve || cumulativeCurve.length === 0) return;
-
-    try {
-      const isLong = cumulativeCurve.length > 50;
-      const labels = cumulativeCurve.map(p => formatTime(p.time, isLong));
-
-      registry["shelfLife"] = new Chart(ctx, {
-        type: "line",
-        data: {
-          labels,
-          datasets: [
-            {
-              label: "Shelf Life Used (Actual)",
-              data: cumulativeCurve.map(p => p.consumedDays),
-              borderColor: PALETTE.breach,
-              backgroundColor: "rgba(213,94,0,0.08)",
-              fill: true,
-              tension: 0.3,
-              pointRadius: 0,
-              borderWidth: 2
-            },
-            {
-              label: "Ideal (At Target Setpoint)",
-              data: cumulativeCurve.map(p => p.idealDays),
-              borderColor: PALETTE.safe,
-              backgroundColor: "transparent",
-              borderDash: [6, 4],
-              pointRadius: 0,
-              borderWidth: 1.5
-            }
-          ]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          animation: false,
-          scales: {
-            x: { ticks: { maxTicksLimit: 8 } },
-            y: { title: { display: true, text: "Days Consumed" }, min: 0 }
-          },
-          plugins: { legend: { position: "top" } }
-        }
-      });
-    } catch (err) {
-      console.error("Shelf life chart error:", err);
-    }
-  }
-
-  // -------------------------------------------------------------------------
-  // 9. DIURNAL HEATMAP
+  // 6. DIURNAL HEATMAP
   // -------------------------------------------------------------------------
   function buildDiurnalHeatmap(containerId, readings) {
     const container = document.getElementById(containerId);
@@ -625,19 +520,19 @@ const Charts = (() => {
   }
 
   // -------------------------------------------------------------------------
-  // 10. MOVING AVERAGE OVERLAY
+  // 7. MOVING AVERAGE OVERLAY (TIMESTAMP-BASED 5-MIN & 1-HR)
   // -------------------------------------------------------------------------
   function buildMovingAvgChart(canvasId, readings) {
     destroyChart("movingAvg");
     const ctx = getCtx(canvasId);
-    if (!ctx || !readings || readings.length < 5) return;
+    if (!ctx || !readings || readings.length < 2) return;
 
     try {
       const isLong = readings.length > 100;
       const labels = readings.map(r => formatTime(r.time, isLong));
       const temps = readings.map(r => r.temp);
-      const ma5min = Analytics.calculateRollingAverages(temps, 10);
-      const ma1hr = Analytics.calculateRollingAverages(temps, 120);
+      const ma5min = Analytics.calculateTimestampMovingAverages(readings, 300);   // 5 minutes = 300s
+      const ma1hr  = Analytics.calculateTimestampMovingAverages(readings, 3600);  // 1 hour = 3600s
 
       registry["movingAvg"] = new Chart(ctx, {
         type: "line",
@@ -692,7 +587,7 @@ const Charts = (() => {
   }
 
   // -------------------------------------------------------------------------
-  // 11. DOWNLOAD CHART AS PNG
+  // 8. DOWNLOAD CHART AS PNG
   // -------------------------------------------------------------------------
   function downloadChart(key, filename) {
     const chart = registry[key];
@@ -709,7 +604,7 @@ const Charts = (() => {
   }
 
   // -------------------------------------------------------------------------
-  // 12. SUITABILITY MATRIX
+  // 9. SUITABILITY MATRIX
   // -------------------------------------------------------------------------
   function computeSuitabilityMatrix(readings, allProducts) {
     return allProducts.map(p => {
@@ -733,12 +628,9 @@ const Charts = (() => {
     destroyChart,
     buildLiveChart,
     buildSparkline,
-    buildSPCChart,
     buildHistogram,
     buildScatterChart,
     buildComplianceDonut,
-    buildExcursionsPerDayChart,
-    buildShelfLifeChart,
     buildDiurnalHeatmap,
     buildMovingAvgChart,
     downloadChart,
