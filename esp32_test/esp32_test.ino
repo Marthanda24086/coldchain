@@ -7,8 +7,8 @@
 #include "DHT.h"
 
 // ---------- WiFi ----------
-const char* WIFI_SSID = "Aparna";
-const char* WIFI_PASS = "P@act12345";
+const char* WIFI_SSID = "Barbarik";
+const char* WIFI_PASS = "teja@24806";
 
 // ---------- ThingSpeak ----------
 const char* TS_API_KEY = "MEFOPQILFT4TFX4F";
@@ -29,7 +29,7 @@ const float TEMP_SETPOINT = 5.0;
 
 // ---------- Timing ----------
 const unsigned long READ_INTERVAL_MS = 5000;
-const unsigned long TS_INTERVAL_MS   = 30000;   // ThingSpeak free tier: min 15 s
+const unsigned long TS_INTERVAL_MS   = 15000;   // ThingSpeak free tier: min 15 s
 
 // ---------- Rolling average ----------
 const int WINDOW = 12;
@@ -61,6 +61,7 @@ void connectWiFi() {
   }
   if (WiFi.status() == WL_CONNECTED) {
     Serial.println("\nWiFi connected");
+    delay(5000);
   } else {
     Serial.println("\nWiFi failed (will retry)");
   }
