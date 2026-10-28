@@ -49,6 +49,18 @@ const App = (() => {
   function el(id) { return document.getElementById(id); }
   function setText(id, txt) { const e = el(id); if (e) e.textContent = txt; }
   function setHTML(id, html) { const e = el(id); if (e) e.innerHTML = html; }
+  function formatRelativeTime(date) {
+    if (!date) return "—";
+    const now = new Date();
+    const diffSec = Math.max(0, Math.round((now.getTime() - new Date(date).getTime()) / 1000));
+    if (diffSec < 10) return "Just now";
+    if (diffSec < 60) return `${diffSec} sec ago`;
+    const diffMin = Math.floor(diffSec / 60);
+    if (diffMin < 60) return `${diffMin} min ago`;
+    const diffHr = Math.floor(diffMin / 60);
+    if (diffHr < 24) return `${diffHr} hr ago`;
+    return `${Math.floor(diffHr / 24)} d ago`;
+  }
 
   // ── Demo Data Generator with Live Moving Telemetry ────────────────────────
   function generateDemoData(hours = 24) {
@@ -242,9 +254,69 @@ const App = (() => {
     else if (currentSection === "reports")     renderReports(product);
   }
 
+  // ── QUICK PRODUCT DROPDOWN & MOBILE MENU ──────────────────────────────────
+  function toggleProductDropdown(e) {
+    if (e) e.stopPropagation();
+    const dd = el("quick-product-dropdown");
+    if (!dd) return;
+    const isHidden = dd.hidden;
+    dd.hidden = !isHidden;
+    if (!dd.hidden) renderQuickProductList();
+  }
+
+  function closeProductDropdown() {
+    const dd = el("quick-product-dropdown");
+    if (dd) dd.hidden = true;
+  }
+
+  function selectProductFromQuick(productId) {
+    window.productManager.setActiveProduct(productId);
+    closeProductDropdown();
+    refresh();
+  }
+
+  function renderQuickProductList() {
+    const container = el("quick-product-list");
+    if (!container) return;
+    const products = window.productManager.getProducts();
+    const activeId = window.productManager.activeProductId;
+
+    container.innerHTML = products.map(p => {
+      const isActive = p.id === activeId;
+      const humText = (p.hasHumidity !== false && p.humMin !== null && p.humMax !== null)
+        ? ` • RH: ${p.humMin}–${p.humMax}%` : " • Temp Only";
+      return `
+        <div class="quick-product-item ${isActive ? "active" : ""}" onclick="App.selectProductFromQuick('${p.id}')">
+          <div class="quick-product-title">
+            <span>${p.name}</span>
+            ${isActive ? '<span class="status-dot online"></span>' : ""}
+          </div>
+          <div class="quick-product-meta">${p.tempMin.toFixed(1)}–${p.tempMax.toFixed(1)} °C (${p.category})${humText}</div>
+        </div>`;
+    }).join("");
+  }
+
+  function toggleMobileMenu() {
+    const drawer = el("mobile-nav-drawer");
+    if (drawer) drawer.hidden = !drawer.hidden;
+  }
+
+  function closeMobileMenu() {
+    const drawer = el("mobile-nav-drawer");
+    if (drawer) drawer.hidden = true;
+  }
+
   // ── TOP BAR STATUS ────────────────────────────────────────────────────────
   function renderTopBarStatus(product) {
+    setText("top-product-name", product.name);
+    setText("top-product-range", `(${product.tempMin.toFixed(1)}–${product.tempMax.toFixed(1)} °C)`);
+
+    const statusDot  = el("telemetry-status-dot");
+    const statusText = el("telemetry-status-text");
+
     if (!allReadings || allReadings.length === 0) {
+      if (statusDot)  statusDot.className  = "status-dot nodata";
+      if (statusText) statusText.textContent = "No Data";
       updateStatusBadge("NO DATA", "No telemetry points available.");
       setText("topbar-temp", "—");
       setText("topbar-hum",  "—");
@@ -252,6 +324,28 @@ const App = (() => {
     }
 
     const latest = allReadings[allReadings.length - 1];
+    const feedTime = new Date(latest.time || lastFetchedTime || new Date());
+    const ageSeconds = Math.max(0, Math.round((new Date().getTime() - feedTime.getTime()) / 1000));
+
+    let connStatus = "Online";
+    let dotClass   = "status-dot online";
+    if (isDemoMode()) {
+      connStatus = "Demo Online";
+      dotClass   = "status-dot online";
+    } else if (ageSeconds < 300) {
+      connStatus = "Online";
+      dotClass   = "status-dot online";
+    } else if (ageSeconds < 1800) {
+      connStatus = "Data Stale";
+      dotClass   = "status-dot stale";
+    } else {
+      connStatus = "Offline";
+      dotClass   = "status-dot nodata";
+    }
+
+    if (statusDot)  statusDot.className  = dotClass;
+    if (statusText) statusText.textContent = connStatus;
+
     const st = Analytics.evaluatePointStatus(latest.temp, latest.hum, product, window.productManager.guardBandEnabled);
     updateStatusBadge(st.status, st.reason);
 
@@ -284,6 +378,12 @@ const App = (() => {
       setHTML("live-status-banner", "<p>No telemetry data available for selected time range.</p>");
       setText("kpi-temp-val", "—");
       setText("kpi-hum-val", "—");
+      setText("kpi-status-val", "NO DATA");
+      setText("kpi-update-val", "—");
+      setText("kpi-product-val", product.name);
+      setText("kpi-product-category", product.category);
+      setText("kpi-product-range", `${product.tempMin.toFixed(1)} to ${product.tempMax.toFixed(1)} °C`);
+      setText("kpi-product-target", `${product.setpoint.toFixed(1)} °C`);
       setText("kpi-rolling-val", "—");
       setText("kpi-dev-val", "—");
       return;
@@ -298,25 +398,87 @@ const App = (() => {
     const rollingNow = rolling[rolling.length - 1] ?? latest.temp;
     const deviationNow = Analytics.calculateDeviation(latest.temp, product.setpoint);
 
-    // KPI Cards
     const trendT = latest.temp - prev.temp;
     const trendH = (latest.hum !== null && prev.hum !== null) ? latest.hum - prev.hum : 0;
+
+    // 1. Current Temperature Card
     setText("kpi-temp-val", fmtTemp(latest.temp));
     setText("kpi-temp-trend", trendT > 0.5 ? "↑" : trendT < -0.5 ? "↓" : "→");
+    const st = Analytics.evaluatePointStatus(latest.temp, latest.hum, product, window.productManager.guardBandEnabled);
+    const tempTagEl = el("kpi-temp-status-tag");
+    if (tempTagEl) {
+      if (st.status === "SAFE") {
+        tempTagEl.textContent = "Normal";
+        tempTagEl.className = "kpi-status-tag tag-safe";
+      } else if (st.status === "WARNING" || st.status === "UNCERTAIN") {
+        tempTagEl.textContent = st.status === "UNCERTAIN" ? "Uncertain (±2°C)" : "Warning";
+        tempTagEl.className = "kpi-status-tag tag-warning";
+      } else {
+        tempTagEl.textContent = "Excursion";
+        tempTagEl.className = "kpi-status-tag tag-breach";
+      }
+    }
 
+    // 2. Current Humidity Card
+    const humTagEl = el("kpi-hum-status-tag");
     if (product.hasHumidity !== false && latest.hum !== null) {
       setText("kpi-hum-val", fmtHum(latest.hum));
       setText("kpi-hum-trend", trendH > 2 ? "↑" : trendH < -2 ? "↓" : "→");
+      const isHumExcursion = (product.humMin !== null && latest.hum < product.humMin) || (product.humMax !== null && latest.hum > product.humMax);
+      if (humTagEl) {
+        humTagEl.textContent = isHumExcursion ? "Excursion" : "In Range";
+        humTagEl.className = isHumExcursion ? "kpi-status-tag tag-breach" : "kpi-status-tag tag-safe";
+      }
+      setText("kpi-hum-status-note", `Limit: ${product.humMin || 20}%–${product.humMax || 80}% RH`);
     } else {
-      setText("kpi-hum-val", "N/A (Temp Only)");
+      setText("kpi-hum-val", "Not Monitored");
       setText("kpi-hum-trend", "—");
+      if (humTagEl) {
+        humTagEl.textContent = "Omitted";
+        humTagEl.className = "kpi-status-tag tag-neutral";
+      }
+      setText("kpi-hum-status-note", `Omitted for ${product.category}`);
     }
 
+    // 3. Data Status Card
+    const feedTime = new Date(latest.time || lastFetchedTime || new Date());
+    const ageSeconds = Math.max(0, Math.round((new Date().getTime() - feedTime.getTime()) / 1000));
+    let statusStr = "ONLINE";
+    let statusDotClass = "status-dot online";
+    if (isDemoMode()) {
+      statusStr = "ONLINE";
+      statusDotClass = "status-dot online";
+    } else if (ageSeconds < 300) {
+      statusStr = "ONLINE";
+      statusDotClass = "status-dot online";
+    } else if (ageSeconds < 1800) {
+      statusStr = "DATA STALE";
+      statusDotClass = "status-dot stale";
+    } else {
+      statusStr = "OFFLINE";
+      statusDotClass = "status-dot nodata";
+    }
+    setText("kpi-status-val", statusStr);
+    const kpiDot = el("kpi-status-dot");
+    if (kpiDot) kpiDot.className = statusDotClass;
+    const cid = CONFIG.getChannelId ? CONFIG.getChannelId() : CONFIG.CHANNEL_ID;
+    setText("kpi-status-subtext", `Channel: ${cid} (${allReadings.length} feeds)`);
+
+    // 4. Last Update Card
+    setText("kpi-update-val", formatRelativeTime(latest.time || lastFetchedTime));
+    setText("last-updated", feedTime.toLocaleTimeString());
+
+    // 5. Active Product Card
+    setText("kpi-product-val", product.name);
+    setText("kpi-product-category", product.category);
+    setText("kpi-product-range", `${product.tempMin.toFixed(1)} to ${product.tempMax.toFixed(1)} °C`);
+    setText("kpi-product-target", `${product.setpoint.toFixed(1)} °C`);
+
+    // Secondary Telemetry Row
     setText("kpi-rolling-val", fmtTemp(rollingNow));
     setText("kpi-dev-val", `${deviationNow > 0 ? "+" : ""}${deviationNow.toFixed(1)} %`);
 
     // Status Banner
-    const st = Analytics.evaluatePointStatus(latest.temp, latest.hum, product, window.productManager.guardBandEnabled);
     const exc = Analytics.detectExcursions(allReadings, product);
     let bannerMsg = `<strong>${st.status}</strong>: ${st.reason}`;
     if (exc.longestExcursion) {
@@ -332,7 +494,7 @@ const App = (() => {
     const deviceAlarm = latest.deviceAlarm;
     const siteIsBreaching = st.status === "BREACH";
     const mismatch = (deviceAlarm === 1) !== siteIsBreaching;
-    setText("device-alarm-badge", deviceAlarm === 1 ? "Device Alarm ON" : "Device Alarm OFF");
+    setText("device-alarm-badge", deviceAlarm === 1 ? "Alarm Active (field5=1)" : "Normal (field5=0)");
     const mismatchEl = el("device-alarm-mismatch");
     if (mismatchEl) {
       if (mismatch) {
@@ -1066,7 +1228,16 @@ const App = (() => {
     // Listen for product updates
     window.addEventListener("coolchain:productChanged", () => {
       updateProductSelector();
+      renderQuickProductList();
       refresh();
+    });
+
+    // Close product dropdown on click outside
+    document.addEventListener("click", e => {
+      const pill = el("active-product-pill");
+      if (pill && !pill.contains(e.target)) {
+        closeProductDropdown();
+      }
     });
 
     // Self-test
@@ -1141,6 +1312,12 @@ const App = (() => {
     init,
     refresh,
     navigateTo,
+    toggleTheme,
+    toggleMobileMenu,
+    closeMobileMenu,
+    toggleProductDropdown,
+    closeProductDropdown,
+    selectProductFromQuick,
     onCategoryChange,
     activateProduct,
     openEditProduct,

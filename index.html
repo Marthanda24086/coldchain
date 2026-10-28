@@ -15,95 +15,153 @@
   <!-- App Layout -->
   <div class="app-container">
 
-    <!-- Sidebar Navigation -->
-    <aside class="sidebar" id="sidebar">
-      <div class="brand-header">
-        <span class="brand-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M2 12h20M4.93 4.93l14.14 14.14M19.07 4.93L4.93 19.07"/></svg></span>
-        <div>
-          <div class="brand-title">CoolChain</div>
-          <div class="brand-tagline">Cold Chain Analytics</div>
+    <!-- Top Navigation Header -->
+    <header class="app-header">
+      <div class="header-left">
+        <a class="brand" onclick="App.navigateTo('live')" title="CoolChain Monitoring">
+          <svg class="brand-logo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2v20M2 12h20M4.93 4.93l14.14 14.14M19.07 4.93L4.93 19.07"/>
+          </svg>
+          <div class="brand-text">
+            <span class="brand-title">CoolChain</span>
+            <span class="brand-subtitle">Cold Chain Analytics</span>
+          </div>
+        </a>
+      </div>
+
+      <!-- Desktop Top Navigation Menu -->
+      <nav class="top-nav" aria-label="Main Navigation">
+        <a class="nav-link nav-active" data-section="live" onclick="App.navigateTo('live')">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+          <span>Live Overview</span>
+        </a>
+        <a class="nav-link" data-section="products" onclick="App.navigateTo('products')">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg>
+          <span>Products</span>
+        </a>
+        <a class="nav-link" data-section="stats" onclick="App.navigateTo('stats')">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
+          <span>Analytics</span>
+        </a>
+        <a class="nav-link" data-section="compliance" onclick="App.navigateTo('compliance')">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          <span>Compliance</span>
+        </a>
+        <a class="nav-link" data-section="trends" onclick="App.navigateTo('trends')">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          <span>Trends</span>
+        </a>
+        <a class="nav-link" data-section="anomalies" onclick="App.navigateTo('anomalies')">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <span>Anomaly Detection</span>
+        </a>
+        <a class="nav-link" data-section="health" onclick="App.navigateTo('health')">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+          <span>Device Health</span>
+        </a>
+        <a class="nav-link" data-section="reports" onclick="App.navigateTo('reports')">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          <span>Reports</span>
+        </a>
+        <a class="nav-link" data-section="about" onclick="App.navigateTo('about')">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+          <span>About</span>
+        </a>
+      </nav>
+
+      <!-- Right Header Actions -->
+      <div class="header-right">
+        <!-- Active Product Pill with [Change] Quick Popover -->
+        <div class="active-product-pill" id="active-product-pill">
+          <div class="product-pill-content" onclick="App.toggleProductDropdown(event)" title="Click to quickly switch monitored product">
+            <span class="pill-prefix">PRODUCT:</span>
+            <strong id="top-product-name" class="pill-name">Vaccines</strong>
+            <span id="top-product-range" class="pill-range">(2–8 °C)</span>
+            <button type="button" class="btn-change-product" onclick="App.toggleProductDropdown(event); event.stopPropagation();">Change</button>
+          </div>
+          <!-- Quick Selection Popover -->
+          <div class="quick-product-dropdown" id="quick-product-dropdown" hidden>
+            <div class="quick-dropdown-header">Select Monitored Profile</div>
+            <div class="quick-dropdown-list" id="quick-product-list">
+              <!-- Populated dynamically -->
+            </div>
+            <div class="quick-dropdown-footer">
+              <a href="#" onclick="App.navigateTo('products'); App.closeProductDropdown(); return false;">Manage &amp; Customize All Profiles &rarr;</a>
+            </div>
+          </div>
+        </div>
+
+        <!-- Telemetry Status Dot & Text -->
+        <div class="telemetry-status-indicator" id="telemetry-status-indicator" title="ThingSpeak Connection &amp; Telemetry Health">
+          <span class="status-dot online" id="telemetry-status-dot"></span>
+          <span class="status-label" id="telemetry-status-text">Online</span>
+        </div>
+
+        <!-- Hidden Product Selector for API compatibility -->
+        <select id="product-selector" class="hidden" style="display:none;"></select>
+
+        <!-- Time Range Selector -->
+        <select id="time-range-selector" class="form-select range-select" title="Telemetry Time Window">
+          <option value="0.25">15 Min</option>
+          <option value="0.5">30 Min</option>
+          <option value="1">1 Hour</option>
+          <option value="6">6 Hours</option>
+          <option value="24">24 Hours</option>
+          <option value="168">7 Days</option>
+          <option value="all" selected>All Data</option>
+          <option value="batch">Current Batch</option>
+          <option value="custom">Custom Range...</option>
+        </select>
+
+        <!-- Notification & Theme Controls -->
+        <button class="btn btn-sm btn-outline header-btn" id="btn-notify" title="Toggle audio and browser alerts">Alerts</button>
+        <button class="btn btn-sm btn-outline header-btn" id="theme-toggle" title="Toggle dark/light theme">Dark</button>
+
+        <!-- Mobile Menu Trigger -->
+        <button class="mobile-menu-btn" id="mobile-menu-btn" onclick="App.toggleMobileMenu()" title="Open Navigation Menu">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:20px;height:20px;"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Mobile Navigation Drawer -->
+    <div class="mobile-nav-drawer" id="mobile-nav-drawer" hidden>
+      <div class="mobile-drawer-backdrop" onclick="App.closeMobileMenu()"></div>
+      <div class="mobile-drawer-content">
+        <div class="mobile-drawer-header">
+          <div class="brand-text">
+            <span class="brand-title">CoolChain Menu</span>
+          </div>
+          <button class="mobile-close-btn" onclick="App.closeMobileMenu()">&times;</button>
+        </div>
+        <div class="mobile-nav-groups">
+          <div class="mobile-nav-group">
+            <div class="mobile-group-title">Overview</div>
+            <a class="nav-link" data-section="live" onclick="App.navigateTo('live'); App.closeMobileMenu();">Live Overview</a>
+          </div>
+          <div class="mobile-nav-group">
+            <div class="mobile-group-title">Operations</div>
+            <a class="nav-link" data-section="products" onclick="App.navigateTo('products'); App.closeMobileMenu();">Products &amp; Batches</a>
+          </div>
+          <div class="mobile-nav-group">
+            <div class="mobile-group-title">Analytics</div>
+            <a class="nav-link" data-section="stats" onclick="App.navigateTo('stats'); App.closeMobileMenu();">Statistical Analytics</a>
+            <a class="nav-link" data-section="compliance" onclick="App.navigateTo('compliance'); App.closeMobileMenu();">Compliance &amp; Excursions</a>
+            <a class="nav-link" data-section="trends" onclick="App.navigateTo('trends'); App.closeMobileMenu();">Trends &amp; Patterns</a>
+            <a class="nav-link" data-section="anomalies" onclick="App.navigateTo('anomalies'); App.closeMobileMenu();">Anomaly Detection</a>
+          </div>
+          <div class="mobile-nav-group">
+            <div class="mobile-group-title">System</div>
+            <a class="nav-link" data-section="health" onclick="App.navigateTo('health'); App.closeMobileMenu();">Device &amp; Data Health</a>
+            <a class="nav-link" data-section="reports" onclick="App.navigateTo('reports'); App.closeMobileMenu();">Reports &amp; Raw Data</a>
+            <a class="nav-link" data-section="about" onclick="App.navigateTo('about'); App.closeMobileMenu();">About &amp; Architecture</a>
+          </div>
         </div>
       </div>
-
-      <ul class="nav-menu">
-        <li><a class="nav-link nav-active" data-section="live" onclick="App.navigateTo('live')"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg> Live Overview</a></li>
-        <li><a class="nav-link" data-section="products" onclick="App.navigateTo('products')"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg> Products &amp; Batches</a></li>
-        <li><a class="nav-link" data-section="stats" onclick="App.navigateTo('stats')"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10M12 20V4M6 20v-6"/></svg> Statistical Analytics</a></li>
-        <li><a class="nav-link" data-section="compliance" onclick="App.navigateTo('compliance')"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> Compliance &amp; Excursions</a></li>
-        <li><a class="nav-link" data-section="trends" onclick="App.navigateTo('trends')"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> Trends &amp; Patterns</a></li>
-        <li><a class="nav-link" data-section="anomalies" onclick="App.navigateTo('anomalies')"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> Anomaly Detection</a></li>
-        <li><a class="nav-link" data-section="health" onclick="App.navigateTo('health')"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg> Device &amp; Data Health</a></li>
-        <li><a class="nav-link" data-section="reports" onclick="App.navigateTo('reports')"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> Reports &amp; Raw Data</a></li>
-        <li><a class="nav-link" data-section="about" onclick="App.navigateTo('about')"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg> About &amp; Architecture</a></li>
-      </ul>
-
-      <div class="sidebar-footer">
-        <div>ESP32 + DHT11 IoT Node</div>
-        <div style="margin-top: 0.25rem;">GitHub Pages Ready</div>
-      </div>
-    </aside>
+    </div>
 
     <!-- Main Workspace Area -->
     <div class="main-wrapper">
-
-      <!-- Sticky Top Bar -->
-      <header class="top-bar">
-        <div class="top-bar-left">
-          <button class="mobile-menu-btn" onclick="document.getElementById('sidebar').classList.toggle('mobile-open')">☰</button>
-
-          <!-- Active Product Dropdown -->
-          <div class="product-selector-wrap" title="Active monitored product profile">
-            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px;"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg>
-            <select id="product-selector" class="form-select">
-              <!-- populated dynamically -->
-            </select>
-            <button class="btn btn-sm btn-outline" onclick="App.openEditProduct(window.productManager.activeProductId)" title="Customize limits for active product">Customize</button>
-          </div>
-
-          <!-- Status Badge -->
-          <div id="status-badge" class="status-badge status-safe" title="Live status">CHECKING...</div>
-
-          <!-- Topbar Realtime Pills -->
-          <span class="live-metric-pill" title="Current Temperature">T: <strong id="topbar-temp">—</strong></span>
-          <span class="live-metric-pill" title="Current Humidity">RH: <strong id="topbar-hum">—</strong></span>
-        </div>
-
-        <div class="top-bar-right">
-          <!-- Time Range Selector -->
-          <select id="time-range-selector" class="form-select" style="background:var(--bg-surface-elevated); padding:0.3rem 0.6rem; border-radius:var(--radius-sm); border:1px solid var(--border);">
-            <option value="0.25">Last 15 Minutes</option>
-            <option value="0.5">Last 30 Minutes</option>
-            <option value="1">Last 1 Hour</option>
-            <option value="6">Last 6 Hours</option>
-            <option value="24">Last 24 Hours</option>
-            <option value="168">Last 7 Days</option>
-            <option value="all" selected>All Telemetry Data</option>
-            <option value="batch">Current Batch</option>
-            <option value="custom">Custom Range...</option>
-          </select>
-
-          <!-- Auto Refresh Toggle -->
-          <label style="font-size: 0.8rem; display: flex; align-items: center; gap: 0.35rem; cursor: pointer;">
-            <input type="checkbox" id="auto-refresh-toggle" checked>
-            <span>Auto (30s)</span>
-          </label>
-
-          <!-- Last Updated -->
-          <span style="font-size: 0.75rem; color: var(--text-muted);" title="Last refresh timestamp">Updated: <strong id="last-updated">—</strong></span>
-
-          <!-- Guard Band Toggle -->
-          <label style="font-size: 0.8rem; display: flex; align-items: center; gap: 0.35rem; cursor: pointer;" title="Treat readings within ±2°C / ±5% RH sensor accuracy as Uncertain">
-            <input type="checkbox" id="guard-band-toggle" checked>
-            <span>Guard Band</span>
-          </label>
-
-          <!-- Notification Permission -->
-          <button class="btn btn-sm btn-outline" id="btn-notify" title="Toggle audio and browser alerts">Alerts</button>
-
-          <!-- Theme Toggle -->
-          <button class="btn btn-sm btn-outline" id="theme-toggle">Dark</button>
-        </div>
-      </header>
 
       <!-- Custom Range Picker Form (Conditional) -->
       <div id="custom-range-form" class="banner banner-info" hidden>
@@ -129,6 +187,24 @@
         <!-- ================================================================ -->
         <section id="section-live" class="section-panel">
 
+          <!-- Section Page Header -->
+          <div class="page-header">
+            <div>
+              <h1 class="page-title">Live Overview</h1>
+              <p class="page-subtitle">Real-time environmental monitoring, operational limits, and hardware telemetry</p>
+            </div>
+            <div class="page-header-meta">
+              <label class="compact-toggle" title="Auto-refresh telemetry every 30 seconds">
+                <input type="checkbox" id="auto-refresh-toggle" checked>
+                <span>Auto-refresh (30s)</span>
+              </label>
+              <label class="compact-toggle" title="Treat readings within &plusmn;2&deg;C / &plusmn;5% RH sensor accuracy as Uncertain">
+                <input type="checkbox" id="guard-band-toggle" checked>
+                <span>Guard Band (&plusmn;2&deg;C)</span>
+              </label>
+            </div>
+          </div>
+
           <!-- Descriptive Status Banner -->
           <div id="live-status-banner" class="status-banner safe">
             <p>Initializing telemetry stream...</p>
@@ -137,52 +213,100 @@
           <!-- Sensor Capability / Measuring Range Warning (DHT11 Limitations) -->
           <div id="sensor-cap-warning" class="banner banner-error" style="border-radius: var(--radius-md);" hidden></div>
 
-          <!-- KPI Cards Grid -->
-          <div class="kpi-grid">
-            <div class="kpi-card">
-              <div class="kpi-label">Current Temperature</div>
+          <!-- 5 Key Operational Status Cards Grid -->
+          <div class="kpi-grid-5">
+            <!-- Card 1: Current Temperature -->
+            <div class="kpi-card kpi-card-hero">
+              <div class="kpi-header-row">
+                <span class="kpi-label">Current Temperature</span>
+                <span id="kpi-temp-status-tag" class="kpi-status-tag tag-safe">Normal</span>
+              </div>
               <div class="kpi-value-row">
-                <span class="kpi-value" id="kpi-temp-val">—</span>
-                <span class="kpi-trend" id="kpi-temp-trend">→</span>
+                <span class="kpi-value" id="kpi-temp-val">&mdash;</span>
+                <span class="kpi-trend" id="kpi-temp-trend" title="Temperature trend">&rarr;</span>
               </div>
               <div class="sparkline-wrap"><canvas id="spark-temp"></canvas></div>
             </div>
 
-            <div class="kpi-card">
-              <div class="kpi-label">Current Humidity</div>
+            <!-- Card 2: Current Humidity -->
+            <div class="kpi-card" id="kpi-card-humidity">
+              <div class="kpi-header-row">
+                <span class="kpi-label">Current Humidity</span>
+                <span id="kpi-hum-status-tag" class="kpi-status-tag tag-neutral">Monitored</span>
+              </div>
               <div class="kpi-value-row">
-                <span class="kpi-value" id="kpi-hum-val">—</span>
-                <span class="kpi-trend" id="kpi-hum-trend">→</span>
+                <span class="kpi-value" id="kpi-hum-val">&mdash;</span>
+                <span class="kpi-trend" id="kpi-hum-trend" title="Humidity trend">&rarr;</span>
               </div>
               <div class="sparkline-wrap"><canvas id="spark-hum"></canvas></div>
+              <div id="kpi-hum-status-note" class="kpi-subnote">Relative humidity level</div>
             </div>
 
+            <!-- Card 3: Data Status -->
             <div class="kpi-card">
-              <div class="kpi-label">Site Rolling Avg (12-Sample)</div>
-              <div class="kpi-value-row">
-                <span class="kpi-value" id="kpi-rolling-val">—</span>
-                <span style="font-size:0.8rem; color:var(--text-muted);">Recomputed</span>
+              <div class="kpi-header-row">
+                <span class="kpi-label">Data Status</span>
+                <span class="status-dot online" id="kpi-status-dot"></span>
               </div>
-              <div style="font-size:0.75rem; color:var(--text-muted); margin-top:0.75rem;">Smoothed moving average filter</div>
+              <div class="kpi-value-row">
+                <span class="kpi-value kpi-status-text" id="kpi-status-val">ONLINE</span>
+              </div>
+              <div class="kpi-meta-block">
+                <div id="kpi-status-subtext" class="kpi-subnote">Channel: 3549272</div>
+                <div class="kpi-subnote">ThingSpeak Cloud Stream</div>
+              </div>
             </div>
 
+            <!-- Card 4: Last Update -->
             <div class="kpi-card">
-              <div class="kpi-label">Deviation from Setpoint</div>
-              <div class="kpi-value-row">
-                <span class="kpi-value" id="kpi-dev-val">—</span>
-                <span style="font-size:0.8rem; color:var(--text-muted);">Target</span>
+              <div class="kpi-header-row">
+                <span class="kpi-label">Last Telemetry</span>
+                <span class="kpi-status-tag tag-neutral">30s Sync</span>
               </div>
-              <div style="font-size:0.75rem; color:var(--text-muted); margin-top:0.75rem;">Relative to active product setpoint</div>
+              <div class="kpi-value-row">
+                <span class="kpi-value kpi-time-text" id="kpi-update-val">Just now</span>
+              </div>
+              <div class="kpi-meta-block">
+                <div id="last-updated-exact" class="kpi-subnote">Sync timestamp: <span id="last-updated">&mdash;</span></div>
+                <div class="kpi-subnote">Auto polling active</div>
+              </div>
+            </div>
+
+            <!-- Card 5: Active Product -->
+            <div class="kpi-card">
+              <div class="kpi-header-row">
+                <span class="kpi-label">Monitored Product</span>
+                <span class="kpi-status-tag tag-blue" id="kpi-product-category">Vaccines</span>
+              </div>
+              <div class="kpi-value-row">
+                <span class="kpi-value kpi-product-name" id="kpi-product-val">Vaccines</span>
+              </div>
+              <div class="kpi-meta-block">
+                <div class="kpi-subnote">Permissible: <strong id="kpi-product-range">2.0 to 8.0 &deg;C</strong></div>
+                <div class="kpi-subnote">Target Setpoint: <strong id="kpi-product-target">5.0 &deg;C</strong></div>
+              </div>
             </div>
           </div>
 
-          <!-- Device Alarm Indicator & Mismatch Notice -->
-          <div class="device-alarm-box">
-            <div>
-              <strong>ESP32 Hardware Telemetry:</strong>
-              <span id="device-alarm-badge" style="margin-left: 0.5rem; font-weight: 600;">Checking…</span>
+          <!-- Secondary Telemetry Row: Hardware Alarm, Rolling Avg, Setpoint Deviation -->
+          <div class="secondary-metrics-grid">
+            <div class="device-alarm-box">
+              <div class="alarm-header-row">
+                <strong>ESP32 Hardware Telemetry:</strong>
+                <span id="device-alarm-badge" class="device-alarm-badge">Checking&hellip;</span>
+              </div>
+              <div id="device-alarm-mismatch" class="mismatch-callout" hidden></div>
             </div>
-            <div id="device-alarm-mismatch" class="mismatch-callout" hidden></div>
+
+            <div class="compact-metric-pill">
+              <span class="label">Site Rolling Avg (12-Pt):</span>
+              <strong id="kpi-rolling-val">&mdash;</strong>
+            </div>
+
+            <div class="compact-metric-pill">
+              <span class="label">Setpoint Deviation:</span>
+              <strong id="kpi-dev-val">&mdash;</strong>
+            </div>
           </div>
 
           <!-- Live Moving Chart Card -->
@@ -207,6 +331,14 @@
         <!-- SECTION 0: PRODUCTS & BATCHES                                    -->
         <!-- ================================================================ -->
         <section id="section-products" class="section-panel" hidden>
+
+          <!-- Section Page Header -->
+          <div class="page-header">
+            <div>
+              <h1 class="page-title">Products &amp; Batches</h1>
+              <p class="page-subtitle">Product profiles, temperature &amp; humidity limits, batch tracking, and inline customization</p>
+            </div>
+          </div>
 
           <!-- INLINE Product Customizer & Editor Card (NO POPUP WINDOW!) -->
           <div class="card" id="inline-product-editor-card" style="border: 2px solid var(--border-focus);">
@@ -350,10 +482,21 @@
         <!-- SECTION 2: STATISTICAL ANALYTICS                                 -->
         <!-- ================================================================ -->
         <section id="section-stats" class="section-panel" hidden>
+
+          <!-- Section Page Header -->
+          <div class="page-header">
+            <div>
+              <h1 class="page-title">Statistical Analytics</h1>
+              <p class="page-subtitle">Mean Kinetic Temperature (MKT), rates of change, parametric distributions, and summary metrics</p>
+            </div>
+            <div class="page-header-meta">
+              <button class="btn btn-sm btn-outline no-print" id="btn-export-stats-csv">Export Stats CSV</button>
+            </div>
+          </div>
+
           <div class="card">
             <div class="card-header">
               <div class="card-title">Parametric &amp; Non-Parametric Statistics</div>
-              <button class="btn btn-sm btn-outline no-print" id="btn-export-stats-csv">Export Stats CSV</button>
             </div>
             <div id="stats-content">
               <!-- Dynamically populated -->
@@ -365,6 +508,14 @@
         <!-- SECTION 3: COMPLIANCE & EXCURSIONS                               -->
         <!-- ================================================================ -->
         <section id="section-compliance" class="section-panel" hidden>
+
+          <!-- Section Page Header -->
+          <div class="page-header">
+            <div>
+              <h1 class="page-title">Compliance &amp; Excursions</h1>
+              <p class="page-subtitle">Regulatory compliance score, excursion logs, grace period evaluations, and thermal distribution</p>
+            </div>
+          </div>
           <div class="grid-2">
             <!-- Score Card -->
             <div class="card score-card">
@@ -453,6 +604,14 @@
         <!-- SECTION 5: TRENDS & PATTERNS                                     -->
         <!-- ================================================================ -->
         <section id="section-trends" class="section-panel" hidden>
+
+          <!-- Section Page Header -->
+          <div class="page-header">
+            <div>
+              <h1 class="page-title">Trends &amp; Patterns</h1>
+              <p class="page-subtitle">Short-term vs long-term moving averages, frequency histograms, diurnal thermal cycles, and trajectory projections</p>
+            </div>
+          </div>
           <!-- Moving Averages -->
           <div class="card">
             <div class="card-title">Short-term (5-min) vs Long-term (1-hour) Moving Averages</div>
@@ -521,6 +680,15 @@
         <!-- SECTION 6: ANOMALY DETECTION                                     -->
         <!-- ================================================================ -->
         <section id="section-anomalies" class="section-panel" hidden>
+
+          <!-- Section Page Header -->
+          <div class="page-header">
+            <div>
+              <h1 class="page-title">Anomaly Detection</h1>
+              <p class="page-subtitle">Statistical outlier evaluation (Z-Score &amp; IQR), rapid temperature jump alerts, and sensor flatline diagnosis</p>
+            </div>
+          </div>
+
           <div class="card">
             <div class="card-header">
               <div class="card-title">Heuristic &amp; Statistical Anomaly Detection</div>
@@ -543,6 +711,14 @@
         <!-- SECTION 7: DEVICE & DATA HEALTH                                  -->
         <!-- ================================================================ -->
         <section id="section-health" class="section-panel" hidden>
+
+          <!-- Section Page Header -->
+          <div class="page-header">
+            <div>
+              <h1 class="page-title">Device &amp; Data Health</h1>
+              <p class="page-subtitle">ThingSpeak API integration, packet completeness metrics, telemetry gaps, and DHT11 hardware diagnostics</p>
+            </div>
+          </div>
 
           <!-- INLINE ThingSpeak Cloud Connection & API Key Configuration -->
           <div class="card" id="inline-api-config-card" style="border: 2px solid var(--border-focus);">
@@ -638,6 +814,18 @@
         <!-- ================================================================ -->
         <section id="section-reports" class="section-panel" hidden>
 
+          <!-- Section Page Header -->
+          <div class="page-header">
+            <div>
+              <h1 class="page-title">Reports &amp; Raw Data</h1>
+              <p class="page-subtitle">Raw telemetry tables, regulatory audit logs, CSV data export, and printer-friendly inspection summaries</p>
+            </div>
+            <div class="page-header-meta">
+              <button class="btn btn-sm btn-outline no-print" id="btn-export-raw-csv">Download Raw CSV</button>
+              <button class="btn btn-sm no-print" id="btn-print-report">Print / Save PDF</button>
+            </div>
+          </div>
+
           <!-- Audit Header for Print Only -->
           <div class="print-only" style="margin-bottom:2rem;">
             <h2>CoolChain Quality &amp; Regulatory Compliance Report</h2>
@@ -648,10 +836,6 @@
           <div class="card">
             <div class="card-header">
               <div class="card-title">Compliance Report Generation &amp; Export</div>
-              <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
-                <button class="btn btn-sm btn-outline no-print" id="btn-export-raw-csv">Download Raw CSV</button>
-                <button class="btn btn-sm no-print" id="btn-print-report">Print / Save as PDF</button>
-              </div>
             </div>
             <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:1rem;">
               Formal compliance documentation incorporating calibrated statistics, Mean Kinetic Temperature (MKT), complete excursion history, and auditor sign-off.
@@ -698,6 +882,17 @@
         <!-- SECTION 9: ABOUT & ARCHITECTURE                                  -->
         <!-- ================================================================ -->
         <section id="section-about" class="section-panel" hidden>
+
+          <!-- Section Page Header -->
+          <div class="page-header">
+            <div>
+              <h1 class="page-title">About &amp; Architecture</h1>
+              <p class="page-subtitle">Decoupled IoT pipeline, analytical formulations, hardware sensor capabilities, and engineering team</p>
+            </div>
+            <div class="page-header-meta">
+              <span class="header-tag">CoolChain v2.4 • ESP32+DHT11</span>
+            </div>
+          </div>
           <div class="card">
             <div class="card-title">About CoolChain</div>
             <p style="margin-top:0.75rem; font-size:0.9rem; color:var(--text-secondary); line-height:1.7;">
